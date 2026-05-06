@@ -1,0 +1,3800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Cake Alert</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Cropper.js for image cropping -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+
+<!-- ─────────── FIREBASE SDK ─────────── -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+  // ▼▼▼ PASTE YOUR firebaseConfig HERE ▼▼▼
+  const firebaseConfig = {
+    apiKey: "AIzaSyA5xC3TXL-GUCKy-nQaMPZ2ni1lAeJV8uQ",
+    authDomain: "cakealert.firebaseapp.com",
+    projectId: "cakealert",
+    storageBucket: "cakealert.firebasestorage.app",
+    messagingSenderId: "254243592143",
+    appId: "1:254243592143:web:4700a992b92518b1fba4ba"
+  };
+  // ▲▲▲ END firebaseConfig ▲▲▲
+
+  window.__FB_READY__ = false;
+  if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+    try {
+      firebase.initializeApp(firebaseConfig);
+      firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+      window.__FB_READY__ = true;
+    } catch (e) { console.error('Firebase init failed', e); }
+  }
+</script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          display: ['Lexend', 'system-ui', 'sans-serif'],
+          sans: ['Lexend', 'system-ui', 'sans-serif'],
+        },
+        colors: {
+          cream:  { 50:'#f6fbfd', 100:'#e8f4f8', 200:'#d3eef3' },
+          rose:   { 50:'#f1fafc', 100:'#dcf1f5', 200:'#a7ebf2', 300:'#7ed0dc', 400:'#54acbf', 500:'#26658c', 600:'#023859', 700:'#012744' },
+          icing:  { 50:'#fbfdff', 100:'#f2f9fc' },
+          cocoa:  { 700:'#023859', 800:'#011c40' },
+        },
+        boxShadow: {
+          'soft':  '0 4px 16px -4px rgba(236, 72, 153, 0.10), 0 2px 6px -2px rgba(0,0,0,0.05)',
+          'soft-lg': '0 10px 30px -8px rgba(236, 72, 153, 0.18), 0 4px 12px -4px rgba(0,0,0,0.06)',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  html, body { background: linear-gradient(180deg, #f6fbfd 0%, #dcf1f5 100%); }
+  html, body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, label { font-family: 'Lexend', system-ui, sans-serif; }
+  body { color: #011c40; }
+  .font-display { font-family: 'Lexend', system-ui, sans-serif; letter-spacing: -0.01em; }
+  .scrollbar-hide::-webkit-scrollbar { display:none; }
+  .scrollbar-hide { scrollbar-width:none; }
+  /* iOS-style slide up */
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .animate-slide-up { animation: slideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1); }
+  .animate-fade-in { animation: fadeIn 0.2s ease-out; }
+  /* Hide spinner on number inputs */
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  /* Soft focus ring */
+  input:focus, select:focus, textarea:focus, button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(38, 101, 140, 0.22);
+    border-color: #26658c;
+  }
+  .lucide { width:1em; height:1em; display:inline-block; vertical-align:-0.125em; }
+  /* Tab slide transition */
+  #tab-home, #tab-calendar {
+    transition: opacity 0.22s ease;
+  }
+  #tab-home.hidden, #tab-calendar.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  #tab-home:not(.hidden), #tab-calendar:not(.hidden) {
+    opacity: 1;
+  }
+
+  /* Safe area padding */
+  body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+
+  /* ─────────── SWIPE-DOWN-TO-CLOSE ─────────── */
+  .swipe-panel { will-change: transform; touch-action: pan-y; overscroll-behavior: contain; }
+  .swipe-panel.swipe-snap { transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1); }
+  .drag-handle {
+    width: 40px; height: 4px;
+    border-radius: 999px;
+    background: rgba(2, 56, 89, 0.18);
+    margin: 8px auto 0;
+    flex-shrink: 0;
+  }
+
+  /* ─────────── CROPPER OVERRIDES ─────────── */
+  #cropperImage { display: block; max-width: 100%; }
+  .cropper-view-box, .cropper-face { border-radius: 4px; }
+  .cropper-line, .cropper-point { background-color: #26658c; }
+  .cropper-view-box { outline-color: #26658c; }
+  .cropper-modal { background-color: #011c40; opacity: 0.65; }
+
+  /* ─────────── LOADING SCREEN ─────────── */
+  #app-loading {
+    position: fixed; inset: 0; z-index: 9999;
+    background: linear-gradient(180deg, #011c40 0%, #023859 55%, #011c40 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    padding: calc(env(safe-area-inset-top, 0) + 40px) 24px calc(env(safe-area-inset-bottom, 0) + 32px);
+    transition: opacity 0.45s ease;
+    font-family: 'Lexend', system-ui, sans-serif;
+  }
+  #app-loading::before {
+    content:''; position:absolute; inset:0;
+    background:
+      radial-gradient(circle at 20% 15%, rgba(236, 72, 153, 0.18), transparent 40%),
+      radial-gradient(circle at 80% 80%, rgba(84, 172, 191, 0.22), transparent 45%);
+    pointer-events:none;
+  }
+  .load-spacer { height: 8px; }
+  .load-logo-wrap {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px; position: relative; z-index: 1;
+  }
+  .load-logo-img {
+    width: 220px; height: 220px;
+    border-radius: 48px;
+    object-fit: cover;
+    filter: drop-shadow(0 18px 42px rgba(236, 72, 153, 0.35));
+    animation: loadLogoIn 0.9s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .load-logo-fallback {
+    width: 220px; height: 220px; border-radius: 48px;
+    background: linear-gradient(135deg, #ec4899, #db2777);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 120px;
+    filter: drop-shadow(0 18px 42px rgba(236, 72, 153, 0.35));
+    animation: loadLogoIn 0.9s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .load-app-name {
+    font-size: 28px; font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    text-align: center;
+    margin-top: 14px;
+    animation: loadSlideUp 0.6s ease-out 0.25s both;
+  }
+  .load-app-sub {
+    font-size: 10px;
+    font-weight: 600;
+    color: #a7ebf2;
+    letter-spacing: 3.5px;
+    text-transform: uppercase;
+    text-align: center;
+    opacity: 0.85;
+    animation: loadSlideUp 0.6s ease-out 0.45s both;
+  }
+  .load-bottom {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    width: 100%; position: relative; z-index: 1;
+    animation: loadSlideUp 0.6s ease-out 0.6s both;
+  }
+  .load-bar-track {
+    width: 140px; height: 3px;
+    background: rgba(167, 235, 242, 0.15);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+  .load-bar-fill {
+    position: absolute; top: 0; left: 0;
+    height: 100%; width: 40%;
+    background: linear-gradient(90deg, #54acbf, #a7ebf2, #54acbf);
+    border-radius: 3px;
+    animation: loadBarSweep 1.4s ease-in-out infinite;
+  }
+  .load-brand {
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(167, 235, 242, 0.6);
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+  }
+  #app-loading.hide { opacity: 0; pointer-events: none; }
+
+  @keyframes loadLogoIn {
+    from { opacity: 0; transform: scale(0.72); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes loadSlideUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes loadBarSweep {
+    0%   { left: -40%; width: 40%; }
+    50%  { left: 30%;  width: 55%; }
+    100% { left: 100%; width: 40%; }
+  }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ─────────── LOADING SCREEN ─────────── -->
+<div id="app-loading">
+  <div class="load-spacer"></div>
+  <div class="load-logo-wrap">
+    <img id="loadLogo" src="logo.png" class="load-logo-img" alt="Cake Alert"
+         onerror="this.style.display='none'; document.getElementById('loadLogoFallback').style.display='flex';">
+    <div id="loadLogoFallback" class="load-logo-fallback" style="display:none;">🎂</div>
+    <div class="load-app-name">Cake Alert</div>
+    <div class="load-app-sub">Never miss a sweet moment</div>
+  </div>
+  <div class="load-bottom">
+    <div class="load-bar-track"><div class="load-bar-fill"></div></div>
+    <div class="load-brand">By Type01Warrior</div>
+  </div>
+</div>
+
+<!-- ─────────── AUTH SCREEN ─────────── -->
+<div id="auth-screen" class="fixed inset-0 z-[60] hidden items-center justify-center p-4"
+     style="background: linear-gradient(135deg, #f1fafc 0%, #dcf1f5 60%, #a7ebf2 100%);">
+  <div class="w-full max-w-md bg-white rounded-3xl shadow-soft-lg border border-rose-100 p-6">
+    <div class="text-center mb-5">
+      <div class="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center shadow-soft mb-3">
+        <i data-lucide="cake" class="text-white w-8 h-8"></i>
+      </div>
+      <h2 class="font-display font-bold text-xl text-cocoa-800">Welcome to Cake Alert</h2>
+      <p class="text-xs text-cocoa-700/70 mt-1" id="authSub">Sign in to keep your sweet moments safe</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="bg-cream-100 rounded-xl p-1 flex mb-5">
+      <button onclick="setAuthMode('signin')" id="authTabSignin" class="auth-tab flex-1 py-2 rounded-lg text-sm font-semibold">Sign In</button>
+      <button onclick="setAuthMode('signup')" id="authTabSignup" class="auth-tab flex-1 py-2 rounded-lg text-sm font-semibold">Sign Up</button>
+    </div>
+
+    <div class="space-y-3">
+      <div class="relative">
+        <i data-lucide="mail" class="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-rose-400"></i>
+        <input id="authEmail" type="email" autocomplete="email" placeholder="Email"
+               class="w-full pl-10 pr-4 py-3 bg-cream-50 rounded-xl border border-rose-100 text-sm">
+      </div>
+      <div class="relative">
+        <i data-lucide="lock" class="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-rose-400"></i>
+        <input id="authPassword" type="password" autocomplete="current-password" placeholder="Password (min 6 chars)"
+               class="w-full pl-10 pr-4 py-3 bg-cream-50 rounded-xl border border-rose-100 text-sm"
+               onkeydown="if(event.key==='Enter') submitAuth();">
+      </div>
+      <div id="authError" class="hidden flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-[12px] text-red-700">
+        <i data-lucide="triangle-alert" class="w-4 h-4 flex-shrink-0 mt-0.5"></i>
+        <span id="authErrorText"></span>
+      </div>
+      <button onclick="submitAuth()" id="authSubmitBtn"
+              class="w-full py-3 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 text-white font-semibold text-sm shadow-soft hover:shadow-soft-lg transition disabled:opacity-60">
+        Sign In
+      </button>
+      <button onclick="forgotPassword()" id="authForgotBtn"
+              class="w-full text-center text-xs text-rose-500 font-semibold hover:underline pt-1">
+        Forgot password?
+      </button>
+    </div>
+
+    <div class="mt-5 pt-4 border-t border-rose-100 text-center">
+      <button onclick="continueOffline()" class="text-xs text-cocoa-700/70 font-semibold hover:text-rose-500 transition">
+        Continue without account →
+      </button>
+      <p class="text-[10px] text-cocoa-700/50 mt-1">Local only · won't sync between devices</p>
+    </div>
+  </div>
+</div>
+
+<div class="max-w-2xl mx-auto px-4 pb-32">
+
+  <!-- ─────────── HEADER ─────────── -->
+  <header class="flex items-center justify-between pt-6 pb-5">
+    <div class="flex items-center gap-3">
+      <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center shadow-soft">
+        <i data-lucide="cake" class="text-white w-6 h-6"></i>
+      </div>
+      <div class="leading-tight">
+        <h1 class="font-display font-bold text-xl text-cocoa-800 tracking-tight">Cake Alert</h1>
+        <p class="text-[11px] text-rose-500/80 font-medium">Never miss a sweet moment</p>
+        <p class="text-[10px] text-rose-400/80 font-medium mt-0.5">By <span class="text-rose-600 font-semibold">Type01warrior</span></p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="openNotifCenter()" id="bellBtn" class="relative w-10 h-10 rounded-2xl bg-white border border-rose-100 text-rose-600 shadow-soft hover:bg-rose-50 transition flex items-center justify-center" title="Notifications">
+        <i data-lucide="bell" class="w-4 h-4"></i>
+        <span id="bellBadge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">0</span>
+      </button>
+      <button onclick="toggleTheme()" id="themeToggle" class="w-10 h-10 rounded-2xl bg-white border border-rose-100 text-rose-600 shadow-soft hover:bg-rose-50 transition flex items-center justify-center" title="Toggle theme">
+        <i data-lucide="sun" id="themeIcon" class="w-4 h-4"></i>
+      </button>
+      <button onclick="openSettings()" class="w-10 h-10 rounded-2xl bg-white border border-rose-100 text-rose-600 shadow-soft hover:bg-rose-50 transition flex items-center justify-center" title="Settings">
+        <i data-lucide="settings" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ─────────── TABS ─────────── -->
+  <div class="bg-white rounded-2xl p-1.5 border border-rose-100 shadow-soft flex gap-1 mb-5">
+    <button data-tab="home" onclick="switchTab('home')" class="tab-btn flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition">
+      <i data-lucide="home" class="w-4 h-4"></i> Home
+    </button>
+    <button data-tab="calendar" onclick="switchTab('calendar')" class="tab-btn flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition">
+      <i data-lucide="calendar-days" class="w-4 h-4"></i> Calendar
+    </button>
+  </div>
+
+  <!-- ─────────── HOME TAB ─────────── -->
+  <section id="tab-home">
+
+    <!-- Search (top of home) -->
+    <div class="relative mb-4">
+      <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-rose-400"></i>
+      <input id="searchInput" type="text" placeholder="Search events, names, notes..." oninput="render()"
+             class="w-full pl-10 pr-4 py-3 bg-white rounded-2xl border border-rose-100 text-sm shadow-soft placeholder-rose-300">
+    </div>
+
+    <!-- Month at a Glance (1st of month) -->
+    <div id="monthAtGlance"></div>
+
+    <!-- Highlight card (next event) -->
+    <div id="nextHighlight"></div>
+
+    <!-- Category filter -->
+    <div class="mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="font-display text-lg font-bold text-cocoa-800">Upcoming</h2>
+        <span id="upcomingCount" class="text-xs text-rose-500/80 font-medium"></span>
+      </div>
+      <div class="flex gap-2 overflow-x-auto scrollbar-hide pb-1" id="categoryFilterBar"></div>
+    </div>
+
+    <!-- Event list -->
+    <div id="eventList" class="space-y-3"></div>
+
+  </section>
+
+  <!-- ─────────── CALENDAR TAB ─────────── -->
+  <section id="tab-calendar" class="hidden">
+
+    <!-- Month nav -->
+    <div class="bg-white rounded-2xl p-4 border border-rose-100 shadow-soft mb-4">
+      <div class="flex items-center justify-between mb-4">
+        <button onclick="changeMonth(-1)" class="w-9 h-9 rounded-full hover:bg-rose-50 flex items-center justify-center text-rose-500">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i>
+        </button>
+        <div class="text-center">
+          <div class="font-display font-bold text-lg text-cocoa-800" id="calMonthLabel"></div>
+          <button onclick="goToToday()" class="text-[11px] text-rose-500 font-semibold hover:underline">Jump to today</button>
+        </div>
+        <button onclick="changeMonth(1)" class="w-9 h-9 rounded-full hover:bg-rose-50 flex items-center justify-center text-rose-500">
+          <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Weekday header -->
+      <div class="grid grid-cols-7 gap-1 mb-2">
+        <div class="text-center text-[10px] font-bold text-rose-400 uppercase tracking-wider">Sun</div>
+        <div class="text-center text-[10px] font-bold text-rose-400 uppercase tracking-wider">Mon</div>
+        <div class="text-center text-[10px] font-bold text-rose-400 uppercase tracking-wider">Tue</div>
+        <div class="text-center text-[10px] font-bold text-rose-400 uppercase tracking-wider">Wed</div>
+        <div class="text-center text-[10px] font-bold text-rose-400 uppercase tracking-wider">Thu</div>
+        <div class="text-center text-[10px] font-bold text-rose-400 uppercase tracking-wider">Fri</div>
+        <div class="text-center text-[10px] font-bold text-rose-400 uppercase tracking-wider">Sat</div>
+      </div>
+
+      <div id="calGrid" class="grid grid-cols-7 gap-1"></div>
+    </div>
+
+    <h2 class="font-display text-lg font-bold text-cocoa-800 mb-3">Events This Month</h2>
+    <div id="monthEventList" class="space-y-3"></div>
+  </section>
+
+</div>
+
+<!-- ─────────── FAB ─────────── -->
+<button onclick="openAddModal()"
+        class="fixed bottom-6 right-6 w-14 h-14 rounded-[22px] bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-soft-lg hover:scale-105 transition flex items-center justify-center z-30">
+  <i data-lucide="plus" class="w-6 h-6"></i>
+</button>
+
+<!-- ─────────── ADD/EDIT MODAL ─────────── -->
+<div id="eventModal" class="fixed inset-0 z-40 hidden items-end justify-center bg-cocoa-800/40 backdrop-blur-sm animate-fade-in">
+  <div class="swipe-panel w-full max-w-2xl bg-cream-50 rounded-t-3xl max-h-[92vh] overflow-y-auto animate-slide-up shadow-soft-lg" data-swipe-close="closeModal">
+    <div class="drag-handle"></div>
+    <div class="sticky top-0 bg-cream-50/95 backdrop-blur-md flex items-center justify-between px-5 py-4 border-b border-rose-100">
+      <h3 class="font-display font-bold text-lg text-cocoa-800" id="modalTitle">Add Event</h3>
+      <button onclick="closeModal()" class="w-9 h-9 rounded-full bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center text-cocoa-700">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="p-5 space-y-5">
+
+      <!-- Image upload -->
+      <div>
+        <button type="button" id="imgPreviewWrap" onclick="openImageSourceSheet()"
+                class="relative block w-full aspect-video rounded-2xl border-2 border-dashed border-rose-200 bg-white overflow-hidden cursor-pointer hover:bg-rose-50/30 transition text-left">
+          <div id="imgPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-center text-rose-400 pointer-events-none">
+            <i data-lucide="image-plus" class="w-10 h-10 mb-2"></i>
+            <div class="text-xs font-semibold">Tap to add a photo</div>
+            <div class="text-[10px] mt-0.5 text-rose-300">Camera or Gallery · cropping included</div>
+          </div>
+          <img id="imgPreview" src="" alt="" class="hidden w-full h-full object-cover pointer-events-none">
+          <span id="imgRemoveBtn"
+                  onclick="event.preventDefault(); event.stopPropagation(); clearImage();"
+                  class="hidden absolute top-2 right-2 w-8 h-8 rounded-full bg-white/95 border border-rose-100 text-rose-600 flex items-center justify-center shadow-soft z-10">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </span>
+        </button>
+        <!-- Hidden inputs: camera vs gallery -->
+        <input id="imgFileCamera" type="file" accept="image/*" capture="environment" onchange="handleImageFile(event)"
+               style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;opacity:0;">
+        <input id="imgFileGallery" type="file" accept="image/*" onchange="handleImageFile(event)"
+               style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;opacity:0;">
+      </div>
+
+      <!-- Type chips -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500">Type</label>
+          <button type="button" onclick="openTypeManager()" class="flex items-center gap-1 text-[11px] font-semibold text-rose-500 hover:text-rose-700 transition">
+            <i data-lucide="pencil" class="w-3 h-3"></i> Manage
+          </button>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2" id="typeGrid"></div>
+      </div>
+
+      <!-- Name (custom/other types fallback) -->
+      <div id="nameField" class="hidden">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Event Name</label>
+        <input id="evName" type="text" placeholder="e.g. Event name"
+               class="w-full px-4 py-3 bg-white rounded-xl border border-rose-100 text-sm">
+      </div>
+
+      <!-- Birthday fields -->
+      <div id="birthdayField">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Whose Birthday? 🎂</label>
+        <input id="evBirthdayPerson" type="text" placeholder="e.g. Mom, Rahul, Sarah…"
+               class="w-full px-4 py-3 bg-white rounded-xl border border-rose-100 text-sm mb-3">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Nickname (optional)</label>
+        <input id="evNickname" type="text" placeholder="e.g. Maa, Raju, Sar…"
+               class="w-full px-4 py-3 bg-white rounded-xl border border-rose-100 text-sm">
+      </div>
+
+      <!-- Anniversary fields -->
+      <div id="anniversaryNames" class="hidden">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Couple 💑</label>
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <input id="evGroom" type="text" placeholder="Partner 1"
+                 class="w-full px-4 py-3 bg-white rounded-xl border border-rose-100 text-sm">
+          <input id="evBride" type="text" placeholder="Partner 2"
+                 class="w-full px-4 py-3 bg-white rounded-xl border border-rose-100 text-sm">
+        </div>
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Which Anniversary? 🥂</label>
+        <input id="evAnniversaryType" type="text" placeholder="e.g. 1st, 5th, Silver (25th), Golden (50th)…"
+               class="w-full px-4 py-3 bg-white rounded-xl border border-rose-100 text-sm">
+      </div>
+
+      <!-- Memory field -->
+      <div id="memoryField" class="hidden">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">What Happened on That Day? 📸</label>
+        <input id="evMemoryDesc" type="text" placeholder="e.g. First day at college, Won the championship…"
+               class="w-full px-4 py-3 bg-white rounded-xl border border-rose-100 text-sm">
+      </div>
+
+      <!-- Something Special field -->
+      <div id="specialField" class="hidden">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">What's Special? ✨</label>
+        <input id="evSpecialDesc" type="text" placeholder="e.g. First meeting, Dream job offer, New home…"
+               class="w-full px-4 py-3 bg-white rounded-xl border border-rose-100 text-sm">
+      </div>
+
+      <!-- Date: DD / MM / YYYY -->
+      <div>
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Date</label>
+        <div class="grid grid-cols-3 gap-2">
+
+          <!-- DD -->
+          <div class="relative">
+            <select id="evDay"
+              class="w-full appearance-none bg-cream-100 border border-rose-100 rounded-2xl px-4 py-3 text-sm font-semibold text-cocoa-700 text-center cursor-pointer pr-8">
+              <option value="">DD</option>
+              <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+              <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+              <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+              <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+              <option value="13">13</option><option value="14">14</option><option value="15">15</option>
+              <option value="16">16</option><option value="17">17</option><option value="18">18</option>
+              <option value="19">19</option><option value="20">20</option><option value="21">21</option>
+              <option value="22">22</option><option value="23">23</option><option value="24">24</option>
+              <option value="25">25</option><option value="26">26</option><option value="27">27</option>
+              <option value="28">28</option><option value="29">29</option><option value="30">30</option>
+              <option value="31">31</option>
+            </select>
+            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-cocoa-700 text-[10px]">▼</span>
+          </div>
+
+          <!-- MM -->
+          <div class="relative">
+            <select id="evMonth"
+              class="w-full appearance-none bg-cream-100 border border-rose-100 rounded-2xl px-4 py-3 text-sm font-semibold text-cocoa-700 text-center cursor-pointer pr-8">
+              <option value="">MM</option>
+              <option value="1">Jan</option><option value="2">Feb</option>
+              <option value="3">Mar</option><option value="4">Apr</option>
+              <option value="5">May</option><option value="6">Jun</option>
+              <option value="7">Jul</option><option value="8">Aug</option>
+              <option value="9">Sep</option><option value="10">Oct</option>
+              <option value="11">Nov</option><option value="12">Dec</option>
+            </select>
+            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-cocoa-700 text-[10px]">▼</span>
+          </div>
+
+          <!-- YYYY -->
+          <div class="relative" id="evYearWrap">
+            <select id="evYear"
+              class="w-full appearance-none bg-cream-100 border border-rose-100 rounded-2xl px-4 py-3 text-sm font-semibold text-cocoa-700 text-center cursor-pointer pr-8">
+            </select>
+            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-cocoa-700 text-[10px]">▼</span>
+          </div>
+
+        </div>
+        <p class="text-[10px] text-rose-400 mt-1.5 ml-1">Year is optional · events repeat yearly automatically</p>
+      </div>
+
+      <!-- Categories -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500">Categories</label>
+          <button type="button" onclick="openCategoryManager()" class="flex items-center gap-1 text-[11px] font-semibold text-rose-500 hover:text-rose-700 transition">
+            <i data-lucide="pencil" class="w-3 h-3"></i> Manage
+          </button>
+        </div>
+        <div class="flex flex-wrap gap-2" id="categoryChips"></div>
+      </div>
+
+      <!-- Mobile -->
+      <div>
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Mobile (optional)</label>
+        <div class="relative">
+          <i data-lucide="phone" class="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-rose-400"></i>
+          <input id="evMobile" type="tel" placeholder="+91 98765 43210"
+                 class="w-full pl-10 pr-4 py-3 bg-white rounded-xl border border-rose-100 text-sm">
+        </div>
+      </div>
+
+      <!-- Location -->
+      <div>
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Location (optional)</label>
+        <div class="relative">
+          <i data-lucide="map-pin" class="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-rose-400"></i>
+          <input id="evLocation" type="text" placeholder="City or address"
+                 class="w-full pl-10 pr-4 py-3 bg-white rounded-xl border border-rose-100 text-sm">
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Notes</label>
+        <textarea id="evNotes" rows="3" placeholder="Gift ideas, plans, etc."
+                  class="w-full px-4 py-3 bg-white rounded-xl border border-rose-100 text-sm resize-none"></textarea>
+      </div>
+
+    </div>
+
+    <!-- Action bar -->
+    <div class="sticky bottom-0 bg-cream-50/95 backdrop-blur-md border-t border-rose-100 px-5 py-4 flex gap-2">
+      <button id="deleteBtn" onclick="deleteEvent()" class="hidden px-4 py-3 rounded-xl bg-white border border-red-200 text-red-500 font-semibold text-sm hover:bg-red-50 transition">
+        <i data-lucide="trash-2" class="w-4 h-4"></i>
+      </button>
+      <button onclick="closeModal()" class="flex-1 py-3 rounded-xl bg-white border border-rose-100 text-cocoa-700 font-semibold text-sm hover:bg-rose-50 transition">
+        Cancel
+      </button>
+      <button onclick="saveEvent()" class="flex-[2] py-3 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 text-white font-semibold text-sm shadow-soft hover:shadow-soft-lg transition" id="saveBtn">
+        Save Event
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── DETAIL MODAL ─────────── -->
+<div id="detailModal" class="fixed inset-0 z-40 hidden items-end justify-center bg-cocoa-800/40 backdrop-blur-sm animate-fade-in">
+  <div class="swipe-panel w-full max-w-2xl bg-cream-50 rounded-t-3xl max-h-[92vh] overflow-y-auto animate-slide-up shadow-soft-lg" data-swipe-close="closeDetail">
+    <div class="drag-handle"></div>
+    <div class="sticky top-0 bg-cream-50/95 backdrop-blur-md flex items-center justify-between px-5 py-4 border-b border-rose-100 z-10">
+      <h3 class="font-display font-bold text-lg text-cocoa-800">Event</h3>
+      <button onclick="closeDetail()" class="w-9 h-9 rounded-full bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center text-cocoa-700">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+    <div id="detailBody"></div>
+    <div class="sticky bottom-0 bg-cream-50/95 backdrop-blur-md border-t border-rose-100 px-5 py-4 flex gap-2">
+      <button onclick="closeDetail()" class="flex-1 py-3 rounded-xl bg-white border border-rose-100 text-cocoa-700 font-semibold text-sm">Close</button>
+      <button onclick="editFromDetail()" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 text-white font-semibold text-sm shadow-soft">
+        Edit
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── SETTINGS MODAL ─────────── -->
+<div id="settingsModal" class="fixed inset-0 z-40 hidden items-end justify-center bg-cocoa-800/40 backdrop-blur-sm animate-fade-in">
+  <div class="swipe-panel w-full max-w-2xl bg-cream-50 rounded-t-3xl max-h-[92vh] overflow-y-auto animate-slide-up shadow-soft-lg" data-swipe-close="closeSettings">
+    <div class="drag-handle"></div>
+    <div class="sticky top-0 bg-cream-50/95 backdrop-blur-md flex items-center justify-between px-5 py-4 border-b border-rose-100 z-10">
+      <h3 class="font-display font-bold text-lg text-cocoa-800">Settings</h3>
+      <button onclick="closeSettings()" class="w-9 h-9 rounded-full bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center text-cocoa-700">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="p-5 space-y-6">
+
+      <!-- Account: signed in -->
+      <section id="userBlock" class="hidden">
+        <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-3 px-1">Account</div>
+        <div class="bg-white rounded-2xl p-4 border border-rose-100 shadow-soft flex items-center gap-3">
+          <div id="userInitial" class="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-400 to-rose-600 text-white font-bold flex items-center justify-center text-lg flex-shrink-0">·</div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[10px] uppercase tracking-wider text-rose-500 font-bold">Signed in</div>
+            <div class="text-sm font-semibold text-cocoa-800 truncate" id="userEmail">—</div>
+          </div>
+          <button onclick="signOut()" class="px-3 py-2 rounded-xl bg-rose-100 text-rose-700 text-xs font-semibold hover:bg-rose-200 transition flex items-center gap-1">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i> Sign Out
+          </button>
+        </div>
+      </section>
+
+      <!-- Account: not signed in -->
+      <section id="userSigninBlock" class="hidden">
+        <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-3 px-1">Account</div>
+        <button onclick="openAuthFromSettings()" class="w-full flex items-center gap-3 bg-white rounded-2xl p-4 border border-rose-100 shadow-soft hover:bg-rose-50 transition text-left">
+          <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
+            <i data-lucide="log-in" class="w-5 h-5"></i>
+          </div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold text-cocoa-800">Sign In or Create Account</div>
+            <div class="text-xs text-cocoa-700/70">Save your sweet moments to the cloud</div>
+          </div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-rose-400"></i>
+        </button>
+      </section>
+
+      <!-- Appearance -->
+      <section>
+        <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-3 px-1">Appearance</div>
+        <button onclick="toggleTheme()" class="w-full flex items-center justify-between gap-3 bg-white rounded-2xl p-4 border border-rose-100 shadow-soft hover:bg-rose-50 transition text-left">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
+              <i data-lucide="sun" id="themeIconSettings" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-cocoa-800">Theme</div>
+              <div class="text-xs text-cocoa-700/70" id="themeLabelSettings">Light mode</div>
+            </div>
+          </div>
+          <div class="relative w-12 h-7 rounded-full bg-rose-100 transition" id="themeSwitch">
+            <div class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform" id="themeKnob"></div>
+          </div>
+        </button>
+      </section>
+
+      <!-- Notifications -->
+      <section>
+        <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-3 px-1">Notifications</div>
+        <div class="bg-white rounded-2xl border border-rose-100 shadow-soft divide-y divide-rose-50">
+          <div class="p-4 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
+                <i data-lucide="bell-ring" class="w-5 h-5"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-sm font-semibold text-cocoa-800">Daily Reminder</div>
+                <div class="text-xs text-cocoa-700/70">Get a daily digest of upcoming events</div>
+              </div>
+            </div>
+            <input type="time" id="dailyReminderInput" onchange="updateDailyReminder()"
+                   class="px-3 py-2 bg-cream-100 rounded-xl border border-rose-100 text-sm font-semibold text-cocoa-800 flex-shrink-0">
+          </div>
+          <div class="p-4 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
+                <i data-lucide="calendar-clock" class="w-5 h-5"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-sm font-semibold text-cocoa-800">Monthly Digest</div>
+                <div class="text-xs text-cocoa-700/70">A summary on the 1st of every month</div>
+              </div>
+            </div>
+            <span class="text-xs font-semibold text-rose-600 flex-shrink-0">On</span>
+          </div>
+          <button onclick="testNotification()" class="w-full p-4 flex items-center gap-3 hover:bg-rose-50 transition text-left">
+            <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
+              <i data-lucide="zap" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+              <div class="text-sm font-semibold text-cocoa-800">Send a test alert</div>
+              <div class="text-xs text-cocoa-700/70">Adds a test entry to the Notification Center</div>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-rose-400"></i>
+          </button>
+        </div>
+      </section>
+
+      <!-- Data -->
+      <section>
+        <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-3 px-1">Data</div>
+        <div class="space-y-2">
+          <button onclick="exportData()" class="w-full flex items-center gap-3 bg-white rounded-2xl p-4 border border-rose-100 shadow-soft hover:bg-rose-50 transition text-left">
+            <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
+              <i data-lucide="download" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+              <div class="text-sm font-semibold text-cocoa-800">Backup</div>
+              <div class="text-xs text-cocoa-700/70">Download an XML file of all your events</div>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-rose-400"></i>
+          </button>
+          <button onclick="openRestorePicker()" class="w-full flex items-center gap-3 bg-white rounded-2xl p-4 border border-rose-100 shadow-soft hover:bg-rose-50 transition text-left">
+            <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
+              <i data-lucide="upload" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+              <div class="text-sm font-semibold text-cocoa-800">Restore</div>
+              <div class="text-xs text-cocoa-700/70">Pick a saved backup or import one from your device</div>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-rose-400"></i>
+          </button>
+        </div>
+        <div id="storageWarn" class="hidden mt-3 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
+          <i data-lucide="triangle-alert" class="w-4 h-4 flex-shrink-0 mt-0.5"></i>
+          <span>Local storage is unavailable. Your events are being kept in memory only — back up often.</span>
+        </div>
+      </section>
+
+      <!-- About -->
+      <section>
+        <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-3 px-1">About</div>
+        <div class="bg-white rounded-2xl p-5 border border-rose-100 shadow-soft text-center">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center shadow-soft mb-3">
+            <i data-lucide="cake" class="w-7 h-7 text-white"></i>
+          </div>
+          <div class="font-display font-bold text-base text-cocoa-800">Cake Alert</div>
+          <div class="text-[11px] text-cocoa-700/70">Never miss a sweet moment</div>
+          <div class="text-[11px] text-cocoa-700/70 mt-1">By <span class="text-rose-600 font-semibold">Type01warrior</span></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="sticky bottom-0 bg-cream-50/95 backdrop-blur-md border-t border-rose-100 px-5 py-4">
+      <button onclick="closeSettings()" class="w-full py-3 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 text-white font-semibold text-sm shadow-soft">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── NOTIFICATION CENTER MODAL ─────────── -->
+<div id="notifModal" class="fixed inset-0 z-40 hidden items-end justify-center bg-cocoa-800/40 backdrop-blur-sm animate-fade-in">
+  <div class="swipe-panel w-full max-w-2xl bg-cream-50 rounded-t-3xl max-h-[92vh] overflow-y-auto animate-slide-up shadow-soft-lg" data-swipe-close="closeNotifCenter">
+    <div class="drag-handle"></div>
+    <div class="sticky top-0 bg-cream-50/95 backdrop-blur-md flex items-center justify-between px-5 py-4 border-b border-rose-100 z-10">
+      <div class="flex items-center gap-2">
+        <i data-lucide="bell" class="w-5 h-5 text-rose-600"></i>
+        <h3 class="font-display font-bold text-lg text-cocoa-800">Notifications</h3>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="clearAllNotifs()" id="notifClearBtn" class="hidden px-3 py-1.5 rounded-full bg-white border border-rose-100 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 transition">Clear all</button>
+        <button onclick="closeNotifCenter()" class="w-9 h-9 rounded-full bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center text-cocoa-700">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+
+    <div id="notifFeed" class="p-5 space-y-4"></div>
+  </div>
+</div>
+
+<!-- ─────────── TYPE MANAGER MODAL ─────────── -->
+<div id="typeManagerModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-cocoa-800/40 backdrop-blur-sm animate-fade-in">
+  <div class="swipe-panel w-full max-w-2xl bg-cream-50 rounded-t-3xl max-h-[92vh] overflow-y-auto animate-slide-up shadow-soft-lg" data-swipe-close="closeTypeManager">
+    <div class="drag-handle"></div>
+    <div class="sticky top-0 bg-cream-50/95 backdrop-blur-md flex items-center justify-between px-5 py-4 border-b border-rose-100 z-10">
+      <div class="flex items-center gap-2">
+        <i data-lucide="tag" class="w-5 h-5 text-rose-600"></i>
+        <h3 class="font-display font-bold text-lg text-cocoa-800">Manage Types</h3>
+      </div>
+      <button onclick="closeTypeManager()" class="w-9 h-9 rounded-full bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center text-cocoa-700">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="p-5 space-y-5">
+      <!-- Add new type -->
+      <section>
+        <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Add new</div>
+        <div class="bg-white rounded-2xl p-4 border border-rose-100 shadow-soft space-y-3">
+          <input id="newTypeLabelInput" type="text" placeholder="Type name (e.g. Engagement)"
+                 class="w-full px-4 py-2.5 bg-cream-100 rounded-xl border border-rose-100 text-sm">
+          <div>
+            <div class="text-[10px] font-bold uppercase tracking-wider text-rose-500 mb-1.5">Icon</div>
+            <div id="newTypeIconPicker" class="flex flex-wrap gap-1.5"></div>
+          </div>
+          <button onclick="addCustomType()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 text-white text-sm font-semibold shadow-soft">
+            <i data-lucide="plus" class="w-4 h-4 inline -mt-0.5"></i> Add type
+          </button>
+        </div>
+      </section>
+
+      <!-- Existing types list -->
+      <section>
+        <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">All types</div>
+        <div id="typeManagerList" class="space-y-2"></div>
+      </section>
+    </div>
+
+    <div class="sticky bottom-0 bg-cream-50/95 backdrop-blur-md border-t border-rose-100 px-5 py-4">
+      <button onclick="closeTypeManager()" class="w-full py-3 rounded-xl bg-white border border-rose-100 text-cocoa-700 font-semibold text-sm">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── CATEGORY MANAGER MODAL ─────────── -->
+<div id="categoryManagerModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-cocoa-800/40 backdrop-blur-sm animate-fade-in">
+  <div class="swipe-panel w-full max-w-2xl bg-cream-50 rounded-t-3xl max-h-[92vh] overflow-y-auto animate-slide-up shadow-soft-lg" data-swipe-close="closeCategoryManager">
+    <div class="drag-handle"></div>
+    <div class="sticky top-0 bg-cream-50/95 backdrop-blur-md flex items-center justify-between px-5 py-4 border-b border-rose-100 z-10">
+      <div class="flex items-center gap-2">
+        <i data-lucide="folder" class="w-5 h-5 text-rose-600"></i>
+        <h3 class="font-display font-bold text-lg text-cocoa-800">Manage Categories</h3>
+      </div>
+      <button onclick="closeCategoryManager()" class="w-9 h-9 rounded-full bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center text-cocoa-700">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="p-5 space-y-5">
+      <!-- Add new category -->
+      <section>
+        <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Add new</div>
+        <div class="bg-white rounded-2xl p-4 border border-rose-100 shadow-soft space-y-3">
+          <input id="newCategoryInput" type="text" placeholder="Category name (e.g. Work, Travel)"
+                 class="w-full px-4 py-2.5 bg-cream-100 rounded-xl border border-rose-100 text-sm"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault(); addCustomCategoryFromManager();}">
+          <div>
+            <div class="text-[10px] font-bold uppercase tracking-wider text-rose-500 mb-1.5">Icon</div>
+            <div id="newCategoryIconPicker" class="flex flex-wrap gap-1.5"></div>
+          </div>
+          <button onclick="addCustomCategoryFromManager()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 text-white text-sm font-semibold shadow-soft">
+            <i data-lucide="plus" class="w-4 h-4 inline -mt-0.5"></i> Add category
+          </button>
+        </div>
+      </section>
+
+      <!-- Existing categories list -->
+      <section>
+        <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">All categories</div>
+        <div id="categoryManagerList" class="space-y-2"></div>
+      </section>
+    </div>
+
+    <div class="sticky bottom-0 bg-cream-50/95 backdrop-blur-md border-t border-rose-100 px-5 py-4">
+      <button onclick="closeCategoryManager()" class="w-full py-3 rounded-xl bg-white border border-rose-100 text-cocoa-700 font-semibold text-sm">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── IMAGE SOURCE ACTION SHEET ─────────── -->
+<div id="imgSourceSheet" class="fixed inset-0 z-[55] hidden items-end justify-center bg-cocoa-800/40 backdrop-blur-sm animate-fade-in">
+  <div class="swipe-panel w-full max-w-md bg-cream-50 rounded-t-3xl animate-slide-up shadow-soft-lg p-4 pb-6 space-y-2" data-swipe-close="closeImageSourceSheet">
+    <div class="drag-handle"></div>
+    <div class="text-center pt-2 pb-2">
+      <h3 class="font-display font-bold text-base text-cocoa-800">Add a photo</h3>
+      <p class="text-xs text-cocoa-700/70 mt-0.5">Choose a source — you'll crop it next</p>
+    </div>
+    <button type="button" onclick="pickImageSource('camera')"
+            class="w-full flex items-center gap-3 bg-white rounded-2xl p-4 border border-rose-100 shadow-soft hover:bg-rose-50 transition text-left">
+      <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center">
+        <i data-lucide="camera" class="w-5 h-5"></i>
+      </div>
+      <div class="flex-1">
+        <div class="text-sm font-semibold text-cocoa-800">Take Photo</div>
+        <div class="text-xs text-cocoa-700/70">Use the camera</div>
+      </div>
+      <i data-lucide="chevron-right" class="w-4 h-4 text-rose-400"></i>
+    </button>
+    <button type="button" onclick="pickImageSource('gallery')"
+            class="w-full flex items-center gap-3 bg-white rounded-2xl p-4 border border-rose-100 shadow-soft hover:bg-rose-50 transition text-left">
+      <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center">
+        <i data-lucide="image" class="w-5 h-5"></i>
+      </div>
+      <div class="flex-1">
+        <div class="text-sm font-semibold text-cocoa-800">Choose from Gallery</div>
+        <div class="text-xs text-cocoa-700/70">Pick an existing image</div>
+      </div>
+      <i data-lucide="chevron-right" class="w-4 h-4 text-rose-400"></i>
+    </button>
+    <button type="button" onclick="closeImageSourceSheet()"
+            class="w-full py-3 rounded-2xl bg-white border border-rose-100 text-cocoa-700 font-semibold text-sm hover:bg-rose-50 transition mt-2">
+      Cancel
+    </button>
+  </div>
+</div>
+
+<!-- ─────────── RESTORE PICKER MODAL ─────────── -->
+<div id="restorePicker" class="fixed inset-0 z-50 hidden items-end justify-center bg-cocoa-800/40 backdrop-blur-sm animate-fade-in">
+  <div class="swipe-panel w-full max-w-2xl bg-cream-50 rounded-t-3xl max-h-[92vh] overflow-y-auto animate-slide-up shadow-soft-lg" data-swipe-close="closeRestorePicker">
+    <div class="drag-handle"></div>
+    <div class="sticky top-0 bg-cream-50/95 backdrop-blur-md flex items-center justify-between px-5 py-4 border-b border-rose-100 z-10">
+      <div class="flex items-center gap-2">
+        <i data-lucide="archive" class="w-5 h-5 text-rose-600"></i>
+        <h3 class="font-display font-bold text-lg text-cocoa-800">Restore Backup</h3>
+      </div>
+      <button onclick="closeRestorePicker()" class="w-9 h-9 rounded-full bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center text-cocoa-700">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="px-5 pt-4 pb-2">
+      <div id="restorePickerLocation" class="text-[11px] text-cocoa-700/70 mb-3"></div>
+    </div>
+
+    <div id="restorePickerList" class="px-5 pb-3 space-y-2"></div>
+
+    <div class="sticky bottom-0 bg-cream-50/95 backdrop-blur-md border-t border-rose-100 px-5 py-3 flex gap-2">
+      <button onclick="document.getElementById('importFile').click()"
+              class="flex-1 py-3 rounded-xl bg-white border border-rose-100 text-cocoa-700 font-semibold text-sm hover:bg-rose-50 transition flex items-center justify-center gap-2">
+        <i data-lucide="folder-open" class="w-4 h-4"></i>
+        Pick from device…
+      </button>
+      <button onclick="closeRestorePicker()"
+              class="flex-1 py-3 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 text-white font-semibold text-sm shadow-soft">
+        Done
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── IMAGE CROPPER MODAL ─────────── -->
+<div id="cropperModal" class="fixed inset-0 z-[56] hidden items-center justify-center bg-cocoa-800/70 backdrop-blur-sm animate-fade-in">
+  <div class="w-full max-w-2xl h-full sm:h-auto sm:max-h-[92vh] bg-cocoa-800 sm:rounded-3xl overflow-hidden shadow-soft-lg flex flex-col">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-white/10">
+      <h3 class="font-display font-bold text-lg text-white">Crop Photo</h3>
+      <button onclick="cancelCrop()" class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="flex-1 min-h-0 bg-black/30 flex items-center justify-center overflow-hidden">
+      <img id="cropperImage" alt="Source" class="max-w-full max-h-full">
+    </div>
+
+    <div class="px-4 py-3 border-t border-white/10 flex items-center justify-center gap-2 flex-wrap">
+      <button onclick="cropperSetAspect(NaN)"   class="cropper-tool px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold">Free</button>
+      <button onclick="cropperSetAspect(1)"     class="cropper-tool px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold">1:1</button>
+      <button onclick="cropperSetAspect(4/3)"   class="cropper-tool px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold">4:3</button>
+      <button onclick="cropperSetAspect(16/9)"  class="cropper-tool px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold">16:9</button>
+      <span class="w-px h-5 bg-white/20 mx-1"></span>
+      <button onclick="cropperRotate(-90)" class="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center" title="Rotate left">
+        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+      </button>
+      <button onclick="cropperRotate(90)" class="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center" title="Rotate right">
+        <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+      </button>
+      <button onclick="cropperFlip()" class="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center" title="Flip">
+        <i data-lucide="flip-horizontal-2" class="w-4 h-4"></i>
+      </button>
+      <button onclick="cropperReset()" class="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center" title="Reset">
+        <i data-lucide="refresh-ccw" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="px-5 py-4 border-t border-white/10 flex gap-2" style="padding-bottom: calc(env(safe-area-inset-bottom, 0) + 16px);">
+      <button onclick="cancelCrop()" class="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-sm">Cancel</button>
+      <button onclick="applyCrop()" class="flex-[2] py-3 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 text-white font-semibold text-sm shadow-soft">Use Photo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 px-5 py-3 rounded-2xl bg-cocoa-800 text-white text-sm font-semibold shadow-soft-lg opacity-0 pointer-events-none transition-all duration-300 z-50"></div>
+
+<input id="importFile" type="file" accept=".xml,.json,application/xml,text/xml,application/json" class="hidden" onchange="handleImport(event)">
+
+<style>
+  /* Tab styling */
+  .tab-btn { color:#26658c; }
+  .tab-btn.active { background: linear-gradient(135deg,#26658c,#023859); color:#fff; box-shadow: 0 6px 18px -6px rgba(2,56,89,0.55); }
+
+  /* Type chip */
+  .type-chip { background: #fff; border-color: #dcf1f5; color:#26658c; }
+  .type-chip.selected { background: linear-gradient(135deg,#f1fafc,#dcf1f5); border-color:#26658c; color:#023859; }
+
+  /* Category chip */
+  .cat-chip { padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1.5px solid #dcf1f5; background:#fff; color:#26658c; cursor:pointer; transition:.2s; display:inline-flex; align-items:center; gap:6px; }
+  .cat-chip.selected { background: linear-gradient(135deg,#26658c,#023859); border-color:#26658c; color:#fff; }
+  .cat-chip-remove { font-size:10px; opacity:.7; }
+
+  /* Filter chip */
+  .filter-chip { padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1.5px solid #dcf1f5; background:#fff; color:#26658c; cursor:pointer; white-space:nowrap; transition:.2s; flex-shrink:0; }
+  .filter-chip.active { background: linear-gradient(135deg,#26658c,#023859); border-color:#26658c; color:#fff; box-shadow: 0 4px 12px -4px rgba(2,56,89,0.4); }
+
+  /* Calendar cell */
+  .cal-cell { aspect-ratio: 1; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer; transition:.15s; position:relative; }
+  .cal-cell.muted { color: #a7c2cf; opacity:.5; }
+  .cal-cell:hover:not(.muted) { background: #f1fafc; }
+  .cal-cell.today { background: #fff; border: 2px solid #26658c; color:#023859; }
+  .cal-cell.has-event { background: linear-gradient(135deg, #f1fafc, #dcf1f5); color:#023859; }
+  .cal-cell.has-event.today { border-color:#023859; }
+  .cal-cell.selected { background: linear-gradient(135deg,#26658c,#023859); color:#fff !important; box-shadow: 0 6px 16px -6px rgba(2,56,89,0.6); }
+  .cal-dots { display:flex; gap:2px; margin-top:2px; height:4px; }
+  .cal-dot { width:4px; height:4px; border-radius:50%; background:#26658c; }
+  .cal-cell.selected .cal-dot { background:#fff; }
+
+  body { color:#011c40; }
+
+  /* ─────────── DARK MODE ─────────── */
+  html.dark, html.dark body { background: linear-gradient(180deg, #011c40 0%, #023859 100%); color:#e8f4f8; }
+
+  html.dark .bg-white { background-color: #0b2a4a !important; }
+  html.dark .bg-white\/95 { background-color: rgba(11,42,74,0.95) !important; }
+  html.dark .bg-white\/25 { background-color: rgba(255,255,255,0.18) !important; }
+
+  html.dark .bg-cream-50 { background-color: #0b2a4a !important; }
+  html.dark .bg-cream-50\/95 { background-color: rgba(11,42,74,0.96) !important; }
+  html.dark .bg-cream-100 { background-color: rgba(167,235,242,0.10) !important; }
+
+  html.dark .bg-rose-50 { background-color: rgba(167,235,242,0.08) !important; }
+  html.dark .bg-rose-50\/30 { background-color: rgba(167,235,242,0.05) !important; }
+  html.dark .bg-rose-100 { background-color: rgba(84,172,191,0.18) !important; }
+  html.dark .hover\:bg-rose-50:hover { background-color: rgba(167,235,242,0.10) !important; }
+
+  html.dark .border-rose-50 { border-color: rgba(167,235,242,0.10) !important; }
+  html.dark .border-rose-100 { border-color: rgba(167,235,242,0.15) !important; }
+  html.dark .border-rose-200 { border-color: rgba(167,235,242,0.22) !important; }
+
+  html.dark .text-cocoa-800 { color:#e8f4f8 !important; }
+  html.dark .text-cocoa-700 { color:#d3eef3 !important; }
+  html.dark .text-cocoa-700\/70 { color: rgba(211,238,243,0.75) !important; }
+  html.dark .text-cocoa-700\/60 { color: rgba(211,238,243,0.6) !important; }
+  html.dark .text-rose-700 { color:#a7ebf2 !important; }
+  html.dark .text-rose-600 { color:#a7ebf2 !important; }
+  html.dark .text-rose-500 { color:#7ed0dc !important; }
+  html.dark .text-rose-500\/80 { color: rgba(126,208,220,0.9) !important; }
+  html.dark .text-rose-400 { color:#7ed0dc !important; }
+  html.dark .text-rose-400\/80 { color: rgba(126,208,220,0.85) !important; }
+  html.dark .text-rose-300 { color: rgba(167,235,242,0.55) !important; }
+  html.dark .placeholder-rose-300::placeholder { color: rgba(167,235,242,0.4) !important; }
+
+  html.dark input, html.dark select, html.dark textarea { background-color:#0b2a4a !important; color:#e8f4f8 !important; }
+
+  /* Amber warning stays, but tune for dark */
+  html.dark .bg-amber-50 { background-color: rgba(251,191,36,0.10) !important; }
+  html.dark .border-amber-200 { border-color: rgba(251,191,36,0.30) !important; }
+  html.dark .text-amber-800 { color:#fcd34d !important; }
+  html.dark .text-amber-700 { color:#fcd34d !important; }
+  html.dark .bg-amber-100 { background-color: rgba(251,191,36,0.18) !important; }
+
+  /* Chips & cells in dark */
+  html.dark .type-chip { background:#0b2a4a; border-color: rgba(167,235,242,0.18); color:#a7ebf2; }
+  html.dark .type-chip.selected { background: linear-gradient(135deg, rgba(38,101,140,0.35), rgba(2,56,89,0.6)); border-color:#54acbf; color:#a7ebf2; }
+  html.dark .cat-chip, html.dark .filter-chip { background:#0b2a4a; border-color: rgba(167,235,242,0.18); color:#a7ebf2; }
+  html.dark .cat-chip.selected, html.dark .filter-chip.active { background: linear-gradient(135deg,#26658c,#023859); border-color:#54acbf; color:#fff; }
+  html.dark .cal-cell.muted { color: rgba(167,235,242,0.25); }
+  html.dark .cal-cell:hover:not(.muted) { background: rgba(167,235,242,0.08); }
+  html.dark .cal-cell.today { background:#0b2a4a; border-color:#54acbf; color:#a7ebf2; }
+  html.dark .cal-cell.has-event { background: linear-gradient(135deg, rgba(38,101,140,0.30), rgba(2,56,89,0.45)); color:#a7ebf2; }
+  html.dark .cal-cell.has-event.today { border-color:#a7ebf2; }
+  html.dark .cal-cell.selected { color:#fff !important; }
+  html.dark .cal-dot { background:#7ed0dc; }
+
+  /* Toast dark */
+  html.dark #toast { background-color:#0b2a4a; color:#e8f4f8; border:1px solid rgba(167,235,242,0.2); }
+
+  /* Modal scrim a touch darker */
+  html.dark .bg-cocoa-800\/40 { background-color: rgba(0,0,0,0.6) !important; }
+
+  /* Auth screen */
+  .auth-tab { color:#26658c; transition: all 0.2s; }
+  .auth-tab.active { background:#fff; color:#023859; box-shadow: 0 2px 8px -2px rgba(2,56,89,0.15); }
+  html.dark .auth-tab.active { background:#0b2a4a; color:#a7ebf2; }
+  html.dark #auth-screen { background: linear-gradient(135deg,#011c40 0%,#023859 70%,#011c40 100%) !important; }
+  html.dark #auth-screen .bg-red-50 { background-color: rgba(239,68,68,0.10) !important; }
+  html.dark #auth-screen .border-red-200 { border-color: rgba(239,68,68,0.30) !important; }
+  html.dark #auth-screen .text-red-700 { color:#fca5a5 !important; }
+</style>
+
+<script>
+/* ─────────────────────────────────────────────
+   STATE
+───────────────────────────────────────────── */
+const STORAGE_KEY = 'cakealert.v1';
+const THEME_KEY = 'cakealert.theme';
+const PRESET_CATEGORIES = ['Family', 'Friends', 'Colleagues', 'School/College', 'Work Friends'];
+
+let state = {
+  events: [],
+  customCategories: [],
+  customTypes: [],
+  typeOverrides: {},     // { 'birthday': { label, icon } } overrides for built-in types
+  hiddenTypes: [],       // built-in type keys the user deleted
+  categoryRenames: {},   // { 'Family': 'My Family' } renames for preset categories
+  hiddenPresets: [],     // preset category names the user deleted
+  categoryIcons: {},     // displayName → lucide icon key
+  notifications: [],
+  notifSettings: { dailyReminderTime: '08:00', enabled: true, lastDailyDate: '', lastMonthlyMonth: '' },
+};
+
+const BUILTIN_TYPES = [
+  { key: 'birthday',    label: 'Birthday',    icon: 'cake'     },
+  { key: 'anniversary', label: 'Anniversary', icon: 'heart'    },
+  { key: 'special',     label: 'Something Special', icon: 'sparkles' },
+  { key: 'memory',      label: 'Memory',      icon: 'camera'   },
+];
+const BUILTIN_TYPE_KEYS = new Set(BUILTIN_TYPES.map(t => t.key));
+const TYPE_ICON_CHOICES = [
+  'cake','heart','sparkles','camera','gift','party-popper','star','music','flower','coffee',
+  'calendar','tag','crown','smile','baby','graduation-cap','trophy','sun','moon','flame',
+  'zap','bell','bookmark','flag','home','plane','car','briefcase','palette','anchor',
+  'feather','gem','leaf','globe','compass','diamond','award','shield','users','dog'
+];
+const CATEGORY_ICON_CHOICES = TYPE_ICON_CHOICES;
+
+/* WhatsApp brand glyph (lucide doesn't ship one) */
+const WHATSAPP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>`;
+
+/** Strip a phone number to just digits (no +). wa.me wants international format without +. */
+function whatsappDigits(num) {
+  if (!num) return '';
+  let s = String(num).trim().replace(/[^\d+]/g, '');
+  if (s.startsWith('+')) s = s.slice(1);
+  return s;
+}
+function openWhatsApp(num) {
+  const digits = whatsappDigits(num);
+  if (!digits) { toast('Invalid number'); return; }
+  // wa.me opens WhatsApp directly when installed; otherwise opens a "click to chat" page.
+  // The Android WebViewClient.shouldOverrideUrlLoading hands wa.me/whatsapp:// URLs to the system.
+  window.location.href = `https://wa.me/${digits}`;
+}
+
+let storageMode = 'local'; // 'local' or 'memory'
+let currentTab = 'home';
+let editingId = null;
+let detailId = null;
+let selectedType = 'birthday';
+let selectedCategories = new Set();
+let activeFilter = 'all';
+let calCursor = (() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; })();
+let calSelectedDay = null;
+
+/* ─────────────────────────────────────────────
+   PERSISTENCE — with Local Mode fallback
+───────────────────────────────────────────── */
+function saveState() {
+  if (storageMode !== 'local') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    storageMode = 'memory';
+    updateStorageWarn();
+    toast('Storage unavailable — using memory only');
+  }
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      state.events = parsed.events || [];
+      state.customCategories = parsed.customCategories || [];
+      state.customTypes = (parsed.customTypes || []).filter(t => t && t.key && t.label);
+      state.typeOverrides = parsed.typeOverrides || {};
+      state.hiddenTypes = parsed.hiddenTypes || [];
+      state.categoryRenames = parsed.categoryRenames || {};
+      state.hiddenPresets = parsed.hiddenPresets || [];
+      state.categoryIcons = parsed.categoryIcons || {};
+      state.notifications = parsed.notifications || [];
+      state.notifSettings = Object.assign(
+        { dailyReminderTime: '08:00', enabled: true, lastDailyDate: '', lastMonthlyMonth: '' },
+        parsed.notifSettings || {}
+      );
+      // Migrate legacy 'custom' type → 'special'
+      state.events.forEach(ev => { if (ev.type === 'custom') ev.type = 'special'; });
+    }
+    storageMode = 'local';
+  } catch (e) {
+    storageMode = 'memory';
+  }
+  updateStorageWarn();
+}
+function updateStorageWarn() {
+  const warn = document.getElementById('storageWarn');
+  if (!warn) return;
+  warn.classList.toggle('hidden', storageMode === 'local');
+}
+
+/* ──────────────────────────────────
+   THEME
+────────────────────────────────── */
+function applyTheme(t) {
+  const isDark = (t === 'dark');
+  document.documentElement.classList.toggle('dark', isDark);
+  const icon = isDark ? 'moon' : 'sun';
+  const iconEl = document.getElementById('themeIcon');
+  const iconElS = document.getElementById('themeIconSettings');
+  if (iconEl)  { iconEl.setAttribute('data-lucide', icon);  iconEl.innerHTML = ''; }
+  if (iconElS) { iconElS.setAttribute('data-lucide', icon); iconElS.innerHTML = ''; }
+  const label = document.getElementById('themeLabelSettings');
+  if (label) label.textContent = isDark ? 'Dark mode' : 'Light mode';
+  const sw = document.getElementById('themeSwitch');
+  const knob = document.getElementById('themeKnob');
+  if (sw && knob) {
+    if (isDark) {
+      sw.style.background = 'linear-gradient(135deg,#26658c,#023859)';
+      knob.style.transform = 'translateX(20px)';
+    } else {
+      sw.style.background = '';
+      knob.style.transform = '';
+    }
+  }
+  lucide.createIcons();
+}
+function toggleTheme() {
+  const isDark = document.documentElement.classList.contains('dark');
+  const next = isDark ? 'light' : 'dark';
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  applyTheme(next);
+}
+function loadTheme() {
+  let t = 'light';
+  try { t = localStorage.getItem(THEME_KEY) || 'light'; } catch (e) {}
+  applyTheme(t);
+}
+
+/* ──────────────────────────────────
+   SETTINGS MODAL
+────────────────────────────────── */
+function openSettings() { updateStorageWarn(); updateAuthUI(firebaseAuth ? firebaseAuth.currentUser : null); syncNotifSettingsToUI(); showModal('settingsModal'); }
+function closeSettings() { hideModal('settingsModal'); }
+
+/* ──────────────────────────────────
+   FIREBASE AUTH
+────────────────────────────────── */
+let firebaseAuth = null;
+let authMode = 'signin';
+let authResolved = false;
+let authResolveCallback = null;
+const authReady = new Promise(res => { authResolveCallback = res; });
+
+function setupAuth() {
+  if (!window.__FB_READY__ || typeof firebase === 'undefined') {
+    authResolved = true;
+    if (authResolveCallback) authResolveCallback();
+    return false;
+  }
+  firebaseAuth = firebase.auth();
+  firebaseAuth.onAuthStateChanged((user) => {
+    if (!authResolved) { authResolved = true; if (authResolveCallback) authResolveCallback(); }
+    updateAuthUI(user);
+  });
+  return true;
+}
+
+function updateAuthUI(user) {
+  const screen = document.getElementById('auth-screen');
+  const userBlock = document.getElementById('userBlock');
+  const userSigninBlock = document.getElementById('userSigninBlock');
+  const fbReady = !!window.__FB_READY__;
+  if (user) {
+    if (screen) { screen.classList.add('hidden'); screen.classList.remove('flex'); }
+    if (userBlock) {
+      userBlock.classList.remove('hidden');
+      const email = user.email || '';
+      document.getElementById('userEmail').textContent = email;
+      document.getElementById('userInitial').textContent = (email || '?').charAt(0).toUpperCase();
+    }
+    if (userSigninBlock) userSigninBlock.classList.add('hidden');
+  } else {
+    if (userBlock) userBlock.classList.add('hidden');
+    if (userSigninBlock) userSigninBlock.classList.toggle('hidden', !fbReady);
+  }
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  document.getElementById('authTabSignin').classList.toggle('active', mode === 'signin');
+  document.getElementById('authTabSignup').classList.toggle('active', mode === 'signup');
+  document.getElementById('authSubmitBtn').textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
+  document.getElementById('authSub').textContent = mode === 'signin'
+    ? 'Sign in to keep your sweet moments safe'
+    : 'Create an account to back up your events';
+  document.getElementById('authForgotBtn').classList.toggle('hidden', mode !== 'signin');
+  document.getElementById('authPassword').setAttribute('autocomplete', mode === 'signin' ? 'current-password' : 'new-password');
+  setAuthError('');
+}
+
+function setAuthError(msg) {
+  const wrap = document.getElementById('authError');
+  const txt = document.getElementById('authErrorText');
+  if (!msg) { wrap.classList.add('hidden'); txt.textContent = ''; }
+  else { wrap.classList.remove('hidden'); txt.textContent = msg; lucide.createIcons(); }
+}
+
+async function submitAuth() {
+  if (!firebaseAuth) { setAuthError('Firebase isn\u2019t configured. Paste your firebaseConfig in index.html.'); return; }
+  const email = document.getElementById('authEmail').value.trim();
+  const pwd = document.getElementById('authPassword').value;
+  if (!email || !pwd) { setAuthError('Please enter email and password'); return; }
+  if (pwd.length < 6) { setAuthError('Password must be at least 6 characters'); return; }
+
+  const btn = document.getElementById('authSubmitBtn');
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = '\u2026';
+  try {
+    if (authMode === 'signup') {
+      await firebaseAuth.createUserWithEmailAndPassword(email, pwd);
+      toast('Welcome \ud83c\udf82');
+    } else {
+      await firebaseAuth.signInWithEmailAndPassword(email, pwd);
+      toast('Signed in');
+    }
+    document.getElementById('authPassword').value = '';
+    setAuthError('');
+  } catch (e) {
+    setAuthError(prettyAuthError(e));
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+
+async function forgotPassword() {
+  if (!firebaseAuth) { setAuthError('Firebase isn\u2019t configured.'); return; }
+  const email = document.getElementById('authEmail').value.trim();
+  if (!email) { setAuthError('Enter your email above first, then tap \u201cForgot password?\u201d'); return; }
+  try {
+    await firebaseAuth.sendPasswordResetEmail(email);
+    setAuthError('');
+    toast('Password reset email sent');
+  } catch (e) { setAuthError(prettyAuthError(e)); }
+}
+
+async function signOut() {
+  if (!firebaseAuth) return;
+  try { await firebaseAuth.signOut(); closeSettings(); toast('Signed out'); showAuthScreen(); }
+  catch (e) { toast('Sign-out failed'); }
+}
+
+function prettyAuthError(e) {
+  const c = (e && e.code) || '';
+  if (c.includes('email-already')) return 'That email is already registered.';
+  if (c.includes('invalid-email')) return 'That email looks invalid.';
+  if (c.includes('weak-password')) return 'Password is too weak.';
+  if (c.includes('wrong-password') || c.includes('invalid-credential') || c.includes('user-not-found')) return 'Incorrect email or password.';
+  if (c.includes('too-many-requests')) return 'Too many attempts. Try again in a moment.';
+  if (c.includes('network')) return 'Network error. Check your connection.';
+  return (e && e.message) || 'Something went wrong.';
+}
+
+function showAuthScreen() {
+  if (!window.__FB_READY__) return;
+  const screen = document.getElementById('auth-screen');
+  if (!screen) return;
+  screen.classList.remove('hidden');
+  screen.classList.add('flex');
+  setAuthMode('signin');
+  setTimeout(() => lucide.createIcons(), 10);
+}
+function continueOffline() {
+  const screen = document.getElementById('auth-screen');
+  screen.classList.add('hidden');
+  screen.classList.remove('flex');
+}
+function openAuthFromSettings() { closeSettings(); showAuthScreen(); }
+
+/* ─────────────────────────────────────────────
+   NOTIFICATIONS  (countdown + daily + monthly)
+───────────────────────────────────────────── */
+const ALERT_OFFSETS = [
+  { key: '7d',  minutes: 10080, label: '7 days before' },
+  { key: '3d',  minutes: 4320,  label: '3 days before' },
+  { key: '1d',  minutes: 1440,  label: '1 day before'  },
+  { key: '12h', minutes: 720,   label: '12 hours before' },
+  { key: '6h',  minutes: 360,   label: '6 hours before'  },
+  { key: '1h',  minutes: 60,    label: '1 hour before'   },
+  { key: 'now', minutes: 0,     label: 'Right now'       },
+];
+const NOTIF_BACKFILL_DAYS = 7;
+const NOTIF_CAP = 200;
+let notifTickHandle = null;
+
+function pad2(n) { return String(n).padStart(2,'0'); }
+function dateKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+
+function occurrenceDateForYear(ev, year) {
+  const d = new Date(year, ev.month - 1, ev.day, 0, 0, 0, 0);
+  return d;
+}
+
+function buildCountdownNotif(ev, offset, occurrenceDate) {
+  const id = `cd_${ev.id}_${offset.key}_${dateKey(occurrenceDate)}`;
+  const tLabel = typeLabel(ev.type);
+  const possessive = ev.name && ev.name.endsWith('s') ? `${ev.name}'` : `${ev.name}'s`;
+  let title, message;
+  if (offset.key === 'now') {
+    title = `It's ${possessive} ${tLabel} now!`;
+    const emoji = ev.type === 'birthday' ? '🎂' : ev.type === 'anniversary' ? '💕' : ev.type === 'memory' ? '📸' : '✨';
+    message = `Wish ${ev.name} a wonderful day ${emoji}`;
+  } else {
+    const phrase = offset.key === '1d' ? 'tomorrow' :
+                   offset.key === '12h' ? 'in 12 hours' :
+                   offset.key === '6h'  ? 'in 6 hours' :
+                   offset.key === '1h'  ? 'in 1 hour'  :
+                   offset.key === '7d'  ? 'in 7 days'  :
+                   offset.key === '3d'  ? 'in 3 days'  : offset.label;
+    title = `${possessive} ${tLabel} is ${phrase}`;
+    message = `${ev.name} · ${MONTHS_FULL[ev.month-1]} ${ev.day}`;
+  }
+  const time = occurrenceDate.getTime() - offset.minutes * 60000;
+  return {
+    id, eventId: ev.id, title, message, time,
+    type: 'countdown', offsetKey: offset.key, read: false,
+  };
+}
+
+function generateCountdownNotifications() {
+  const now = Date.now();
+  const windowStart = now - NOTIF_BACKFILL_DAYS * 86400000;
+  const existingIds = new Set(state.notifications.map(n => n.id));
+  const thisYear = new Date().getFullYear();
+
+  for (const ev of state.events) {
+    if (!ev.month || !ev.day) continue;
+    // Check this year's and next year's occurrence
+    for (const yr of [thisYear, thisYear + 1, thisYear - 1]) {
+      const occ = occurrenceDateForYear(ev, yr);
+      for (const offset of ALERT_OFFSETS) {
+        const alertTime = occ.getTime() - offset.minutes * 60000;
+        if (alertTime > now || alertTime < windowStart) continue;
+        const notif = buildCountdownNotif(ev, offset, occ);
+        if (!existingIds.has(notif.id)) {
+          state.notifications.push(notif);
+          existingIds.add(notif.id);
+        }
+      }
+    }
+  }
+}
+
+function maybeFireDailyReminder() {
+  if (!state.notifSettings.enabled) return;
+  const now = new Date();
+  const today = dateKey(now);
+  if (state.notifSettings.lastDailyDate === today) return;
+  const [h, m] = (state.notifSettings.dailyReminderTime || '08:00').split(':').map(Number);
+  const target = new Date(now); target.setHours(h, m, 0, 0);
+  if (now.getTime() < target.getTime()) return; // not yet today
+
+  // Build digest of events in next 7 days
+  const upcoming = state.events
+    .map(ev => ({ ev, days: daysUntil(ev) }))
+    .filter(x => x.days >= 0 && x.days <= 7)
+    .sort((a,b) => a.days - b.days)
+    .slice(0, 6);
+
+  if (upcoming.length === 0) {
+    state.notifSettings.lastDailyDate = today;
+    return; // nothing to remind about today
+  }
+
+  const id = `daily_${today}`;
+  if (!state.notifications.find(n => n.id === id)) {
+    const previewLines = upcoming.map(u => {
+      if (u.days === 0) return `Today: ${u.ev.name}`;
+      if (u.days === 1) return `Tomorrow: ${u.ev.name}`;
+      return `In ${u.days}d: ${u.ev.name}`;
+    });
+    state.notifications.push({
+      id,
+      title: `Good ${h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'}! ☀`,
+      message: `${upcoming.length} event${upcoming.length === 1 ? '' : 's'} in the next 7 days · ${previewLines.slice(0,3).join(' · ')}${previewLines.length > 3 ? '…' : ''}`,
+      time: target.getTime(),
+      type: 'daily',
+      read: false,
+    });
+  }
+  state.notifSettings.lastDailyDate = today;
+}
+
+function maybeFireMonthlyDigest() {
+  if (!state.notifSettings.enabled) return;
+  const now = new Date();
+  if (now.getDate() !== 1) return;
+  const monthKey = `${now.getFullYear()}-${pad2(now.getMonth()+1)}`;
+  if (state.notifSettings.lastMonthlyMonth === monthKey) return;
+
+  const monthEvents = state.events
+    .filter(ev => ev.month === now.getMonth() + 1)
+    .sort((a, b) => a.day - b.day);
+
+  const id = `monthly_${monthKey}`;
+  if (!state.notifications.find(n => n.id === id)) {
+    state.notifications.push({
+      id,
+      title: `${MONTHS_FULL[now.getMonth()]} at a glance ✨`,
+      message: monthEvents.length
+        ? `${monthEvents.length} event${monthEvents.length === 1 ? '' : 's'} this month · ${monthEvents.slice(0,4).map(e => `${e.name} (${e.month}/${e.day})`).join(' · ')}${monthEvents.length > 4 ? '…' : ''}`
+        : 'A fresh month! No events scheduled — add some sweet moments.',
+      time: now.getTime(),
+      type: 'monthly',
+      read: false,
+    });
+  }
+  state.notifSettings.lastMonthlyMonth = monthKey;
+}
+
+function notifTick() {
+  generateCountdownNotifications();
+  maybeFireDailyReminder();
+  maybeFireMonthlyDigest();
+  // Cap & sort
+  state.notifications.sort((a, b) => b.time - a.time);
+  if (state.notifications.length > NOTIF_CAP) {
+    state.notifications.length = NOTIF_CAP;
+  }
+  saveState();
+  refreshBellBadge();
+  renderMonthAtGlance();
+}
+
+function startNotifTicker() {
+  if (notifTickHandle) clearInterval(notifTickHandle);
+  notifTick();
+  notifTickHandle = setInterval(notifTick, 60000);
+}
+
+function refreshBellBadge() {
+  const badge = document.getElementById('bellBadge');
+  if (!badge) return;
+  const unread = state.notifications.filter(n => !n.read).length;
+  if (unread > 0) {
+    badge.textContent = unread > 99 ? '99+' : String(unread);
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function notifIcon(n) {
+  if (n.type === 'daily') return 'sun';
+  if (n.type === 'monthly') return 'calendar-clock';
+  if (n.type === 'test') return 'zap';
+  if (n.eventId) {
+    const ev = state.events.find(e => e.id === n.eventId);
+    if (ev) return typeIcon(ev.type);
+  }
+  return 'bell';
+}
+
+function relativeTime(ms) {
+  const diff = Date.now() - ms;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
+  const d = Math.floor(diff/86400000);
+  if (d < 7) return `${d}d ago`;
+  return new Date(ms).toLocaleDateString();
+}
+
+function openNotifCenter() {
+  notifTick();
+  renderNotifFeed();
+  showModal('notifModal');
+  setTimeout(() => lucide.createIcons(), 10);
+}
+function closeNotifCenter() {
+  // mark all as read on close
+  state.notifications.forEach(n => n.read = true);
+  saveState();
+  refreshBellBadge();
+  hideModal('notifModal');
+}
+
+function renderNotifFeed() {
+  const feed = document.getElementById('notifFeed');
+  const clearBtn = document.getElementById('notifClearBtn');
+  if (!feed) return;
+
+  const items = state.notifications.slice().sort((a, b) => b.time - a.time);
+  clearBtn.classList.toggle('hidden', items.length === 0);
+
+  if (items.length === 0) {
+    feed.innerHTML = `
+      <div class="text-center py-12">
+        <div class="w-16 h-16 mx-auto rounded-full bg-rose-100 flex items-center justify-center text-rose-500 mb-3">
+          <i data-lucide="bell-off" class="w-7 h-7"></i>
+        </div>
+        <div class="font-display font-semibold text-cocoa-800">All caught up</div>
+        <div class="text-xs text-cocoa-700/70 mt-1">No notifications yet — they'll appear here as your events get closer.</div>
+      </div>`;
+    lucide.createIcons();
+    return;
+  }
+
+  // Group by relative day bucket
+  const groups = { Today: [], Yesterday: [], Earlier: [] };
+  const today = dateKey(new Date());
+  const yest = dateKey(new Date(Date.now() - 86400000));
+  for (const n of items) {
+    const k = dateKey(new Date(n.time));
+    if (k === today) groups.Today.push(n);
+    else if (k === yest) groups.Yesterday.push(n);
+    else groups.Earlier.push(n);
+  }
+
+  feed.innerHTML = Object.entries(groups).filter(([,arr]) => arr.length).map(([label, arr]) => `
+    <div>
+      <div class="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2 px-1">${label}</div>
+      <div class="space-y-2">
+        ${arr.map(n => `
+          <div onclick="onNotifClick('${n.id}')"
+               class="relative flex gap-3 p-3 rounded-2xl border ${n.read ? 'bg-white border-rose-50' : 'bg-rose-50 border-rose-200'} cursor-pointer hover:bg-rose-100 transition">
+            ${!n.read ? '<span class="absolute top-3 right-3 w-2 h-2 rounded-full bg-rose-500"></span>' : ''}
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-400 to-rose-600 text-white flex items-center justify-center flex-shrink-0">
+              <i data-lucide="${notifIcon(n)}" class="w-4 h-4"></i>
+            </div>
+            <div class="flex-1 min-w-0 pr-3">
+              <div class="text-sm font-semibold text-cocoa-800 truncate">${escapeHtml(n.title)}</div>
+              <div class="text-xs text-cocoa-700/70 mt-0.5 line-clamp-2">${escapeHtml(n.message)}</div>
+              <div class="text-[10px] text-rose-500/80 font-medium mt-1">${relativeTime(n.time)}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>
+  `).join('');
+  lucide.createIcons();
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+    .replaceAll('"','&quot;').replaceAll("'",'&#39;');
+}
+
+function onNotifClick(id) {
+  const n = state.notifications.find(x => x.id === id);
+  if (!n) return;
+  n.read = true;
+  saveState();
+  if (n.eventId) {
+    closeNotifCenter();
+    setTimeout(() => openDetail(n.eventId), 100);
+  } else {
+    renderNotifFeed();
+    refreshBellBadge();
+  }
+}
+
+function clearAllNotifs() {
+  state.notifications = [];
+  saveState();
+  refreshBellBadge();
+  renderNotifFeed();
+  toast('Notifications cleared');
+}
+
+function updateDailyReminder() {
+  const v = document.getElementById('dailyReminderInput').value || '08:00';
+  state.notifSettings.dailyReminderTime = v;
+  state.notifSettings.lastDailyDate = ''; // allow re-fire today if time changed
+  saveState();
+  syncAndroidNotifications();
+  toast(`Daily reminder set to ${v}`);
+}
+
+function testNotification() {
+  const id = 'test_' + Date.now();
+  const title = 'Test alert 🍰';
+  const message = 'Your Notification Center is working — countdown alerts will appear here as your events get closer.';
+  state.notifications.push({ id, title, message, time: Date.now(), type: 'test', read: false });
+  saveState();
+  refreshBellBadge();
+  if (!document.getElementById('notifModal').classList.contains('hidden')) renderNotifFeed();
+
+  // Also fire a real Android system notification
+  if (hasAndroidNotifBridge()) {
+    try {
+      if (!AndroidNotif.hasPermission()) { AndroidNotif.requestPermission(); }
+      AndroidNotif.showNow(id, title, message, '');
+    } catch (e) { console.warn('showNow', e); }
+  }
+  toast('Test alert sent');
+}
+
+function syncNotifSettingsToUI() {
+  const inp = document.getElementById('dailyReminderInput');
+  if (inp) inp.value = state.notifSettings.dailyReminderTime || '08:00';
+}
+
+/* ── Native Android bridge ── */
+function hasAndroidNotifBridge() {
+  return typeof window.AndroidNotif !== 'undefined' && window.AndroidNotif !== null;
+}
+
+function ensureAndroidNotifPermission() {
+  if (!hasAndroidNotifBridge()) return;
+  try {
+    if (!AndroidNotif.hasPermission()) {
+      AndroidNotif.requestPermission();
+    }
+  } catch (e) { console.warn('notif perm', e); }
+}
+
+window.__onNotifPermissionResult = function(granted) {
+  if (granted) {
+    toast('Notifications enabled');
+    syncAndroidNotifications();
+  } else {
+    toast('Notifications disabled in system settings');
+  }
+};
+
+function buildAndroidScheduleList() {
+  const list = [];
+  const now = Date.now();
+  const horizon = now + 60 * 86400000; // 60-day horizon
+  const thisYear = new Date().getFullYear();
+  const seen = new Set();
+
+  // Countdown alerts for each event
+  for (const ev of state.events) {
+    if (!ev.month || !ev.day) continue;
+    for (const yr of [thisYear, thisYear + 1]) {
+      const occ = occurrenceDateForYear(ev, yr);
+      for (const offset of ALERT_OFFSETS) {
+        const time = occ.getTime() - offset.minutes * 60000;
+        if (time <= now || time > horizon) continue;
+        const built = buildCountdownNotif(ev, offset, occ);
+        if (seen.has(built.id)) continue;
+        seen.add(built.id);
+        list.push({
+          id: built.id,
+          title: built.title,
+          message: built.message,
+          time: time,
+          eventId: ev.id,
+        });
+      }
+    }
+  }
+
+  // Daily reminder for next 14 days (one per day at configured time)
+  if (state.notifSettings.enabled) {
+    const [h, m] = (state.notifSettings.dailyReminderTime || '08:00').split(':').map(Number);
+    for (let d = 0; d < 14; d++) {
+      const day = new Date();
+      day.setDate(day.getDate() + d);
+      day.setHours(h, m, 0, 0);
+      if (day.getTime() <= now) continue;
+      // Skip if no events in next 7 days from that day
+      const dayMs = day.getTime();
+      const events7 = state.events
+        .map(ev => ({ ev, days: Math.ceil((nextOccurrenceMsFromTs(ev, dayMs) - dayMs) / 86400000) }))
+        .filter(x => x.days >= 0 && x.days <= 7);
+      if (events7.length === 0) continue;
+      const id = `daily_${dateKey(day)}`;
+      const top = events7.slice(0, 3).map(x => x.ev.name).join(', ');
+      list.push({
+        id,
+        title: `Cake Alert · ${events7.length} event${events7.length === 1 ? '' : 's'} this week`,
+        message: `Coming up: ${top}${events7.length > 3 ? '…' : ''}`,
+        time: dayMs,
+        eventId: '',
+      });
+    }
+  }
+
+  // Monthly digest on the 1st of each of the next 3 months
+  if (state.notifSettings.enabled) {
+    const [h, m] = (state.notifSettings.dailyReminderTime || '08:00').split(':').map(Number);
+    for (let i = 0; i < 3; i++) {
+      const d = new Date();
+      const targetMonth = d.getMonth() + i + (d.getDate() === 1 ? 0 : 1);
+      const target = new Date(d.getFullYear(), targetMonth, 1, h, m, 0, 0);
+      if (target.getTime() <= now) continue;
+      const monthEvents = state.events.filter(ev => ev.month === target.getMonth() + 1);
+      if (monthEvents.length === 0) continue;
+      const monthKey = `${target.getFullYear()}-${pad2(target.getMonth()+1)}`;
+      const id = `monthly_${monthKey}`;
+      list.push({
+        id,
+        title: `${MONTHS_FULL[target.getMonth()]} at a glance ✨`,
+        message: `${monthEvents.length} event${monthEvents.length === 1 ? '' : 's'} this month: ${monthEvents.slice(0,4).map(e => e.name).join(', ')}${monthEvents.length > 4 ? '…' : ''}`,
+        time: target.getTime(),
+        eventId: '',
+      });
+    }
+  }
+
+  return list;
+}
+
+function nextOccurrenceMsFromTs(ev, fromMs) {
+  const from = new Date(fromMs);
+  let d = new Date(from.getFullYear(), ev.month - 1, ev.day);
+  if (d.getTime() < from.setHours(0,0,0,0)) {
+    d = new Date(from.getFullYear() + 1, ev.month - 1, ev.day);
+  }
+  return d.getTime();
+}
+
+function syncAndroidNotifications() {
+  if (!hasAndroidNotifBridge()) return;
+  try {
+    const list = buildAndroidScheduleList();
+    AndroidNotif.scheduleBatch(JSON.stringify(list));
+  } catch (e) { console.warn('scheduleBatch failed', e); }
+}
+
+/* ─────────────────────────────────────────────
+   MONTH AT A GLANCE  (Home, on the 1st)
+───────────────────────────────────────────── */
+function renderMonthAtGlance() {
+  const wrap = document.getElementById('monthAtGlance');
+  if (!wrap) return;
+  const now = new Date();
+  if (now.getDate() !== 1) { wrap.innerHTML = ''; return; }
+
+  const monthEvents = state.events
+    .filter(ev => ev.month === now.getMonth() + 1)
+    .sort((a, b) => a.day - b.day);
+
+  const counts = monthEvents.reduce((acc, ev) => {
+    acc[ev.type] = (acc[ev.type] || 0) + 1; return acc;
+  }, {});
+  const summary = Object.entries(counts).map(([t, c]) =>
+    `${c} ${typeLabel(t).toLowerCase()}${c > 1 ? (t === 'birthday' ? 's' : t === 'anniversary' ? ' anniversaries' : '') : ''}`
+  );
+
+  wrap.innerHTML = `
+    <div class="relative overflow-hidden rounded-3xl p-5 mb-4 text-white shadow-soft-lg"
+         style="background: linear-gradient(135deg, #26658c 0%, #023859 100%);">
+      <div class="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/10"></div>
+      <div class="absolute -bottom-8 -left-8 w-28 h-28 rounded-full bg-white/5"></div>
+      <div class="relative">
+        <div class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider opacity-80">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+          ${MONTHS_FULL[now.getMonth()]} at a glance
+        </div>
+        <div class="text-3xl font-display font-bold mt-1">${monthEvents.length} event${monthEvents.length === 1 ? '' : 's'}</div>
+        <div class="text-xs opacity-80 mt-1">${summary.length ? summary.join(' · ') : 'A fresh month — add your sweet moments.'}</div>
+        ${monthEvents.length ? `
+          <div class="mt-3 flex flex-wrap gap-1.5">
+            ${monthEvents.slice(0,8).map(ev => `
+              <span class="inline-flex items-center gap-1 bg-white/20 backdrop-blur rounded-full px-2.5 py-1 text-[11px] font-semibold">
+                <i data-lucide="${typeIcon(ev.type)}" class="w-3 h-3"></i>
+                ${escapeHtml(ev.name)} · ${ev.day}
+              </span>`).join('')}
+            ${monthEvents.length > 8 ? `<span class="text-[11px] opacity-75 self-center">+${monthEvents.length - 8} more</span>` : ''}
+          </div>` : ''}
+      </div>
+    </div>`;
+  lucide.createIcons();
+}
+
+/* ─────────────────────────────────────────────
+   DATE UTILITIES
+───────────────────────────────────────────── */
+const MONTHS_FULL  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function todayMid() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+
+/**
+ * Days until next occurrence of the event.
+ * Auto-repeats yearly. Year on event is optional — used only for age calc.
+ */
+function daysUntilNext(ev) {
+  const today = todayMid();
+  let next = new Date(today.getFullYear(), ev.month - 1, ev.day);
+  if (next < today) next = new Date(today.getFullYear() + 1, ev.month - 1, ev.day);
+  return Math.round((next - today) / 86400000);
+}
+function nextOccurrenceDate(ev) {
+  const today = todayMid();
+  let next = new Date(today.getFullYear(), ev.month - 1, ev.day);
+  if (next < today) next = new Date(today.getFullYear() + 1, ev.month - 1, ev.day);
+  return next;
+}
+function ageOnNext(ev) {
+  if (!ev.year) return null;
+  const next = nextOccurrenceDate(ev);
+  return next.getFullYear() - ev.year;
+}
+
+function countdownText(days) {
+  if (days === 0) return 'Today!';
+  if (days === 1) return 'Tomorrow';
+  if (days <= 7)  return `In ${days} days`;
+  if (days <= 30) return `In ${days} days`;
+  return `In ${days} days`;
+}
+
+/* ─────────────────────────────────────────────
+   CATEGORIES
+───────────────────────────────────────────── */
+function allCategories() {
+  const presets = PRESET_CATEGORIES
+    .filter(c => !state.hiddenPresets.includes(c))
+    .map(c => state.categoryRenames[c] || c);
+  return [...presets, ...state.customCategories];
+}
+
+/** Returns the ORIGINAL preset key whose current display name equals `displayName`, or null. */
+function findPresetOriginalForDisplay(displayName) {
+  for (const orig of PRESET_CATEGORIES) {
+    if (state.hiddenPresets.includes(orig)) continue;
+    const current = state.categoryRenames[orig] || orig;
+    if (current === displayName) return orig;
+  }
+  return null;
+}
+
+function renderCategoryChips() {
+  const wrap = document.getElementById('categoryChips');
+  wrap.innerHTML = allCategories().map(cat => {
+    const sel = selectedCategories.has(cat) ? 'selected' : '';
+    const icon = state.categoryIcons[cat] || 'folder';
+    return `
+      <span class="cat-chip ${sel}" onclick="toggleCategorySelect('${escAttr(cat)}')">
+        <i data-lucide="${escapeHtml(icon)}" class="w-3 h-3"></i>
+        <span>${escapeHtml(cat)}</span>
+      </span>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+function toggleCategorySelect(cat) {
+  if (selectedCategories.has(cat)) selectedCategories.delete(cat);
+  else selectedCategories.add(cat);
+  renderCategoryChips();
+}
+
+function addCustomCategory() {
+  const input = document.getElementById('customCatInput');
+  const v = input.value.trim();
+  if (!v) return;
+  if (allCategories().some(c => c.toLowerCase() === v.toLowerCase())) {
+    toast('Category exists'); return;
+  }
+  state.customCategories.push(v);
+  selectedCategories.add(v);
+  saveState();
+  input.value = '';
+  renderCategoryChips();
+}
+
+function removeCustomCategory(cat) {
+  state.customCategories = state.customCategories.filter(c => c !== cat);
+  selectedCategories.delete(cat);
+  saveState();
+  renderCategoryChips();
+}
+
+function renderFilterBar() {
+  const bar = document.getElementById('categoryFilterBar');
+  const cats = ['all', ...allCategories()];
+  bar.innerHTML = cats.map(cat => {
+    const active = activeFilter === cat ? 'active' : '';
+    const label  = cat === 'all' ? 'All' : cat;
+    return `<button class="filter-chip ${active}" onclick="setFilter('${escAttr(cat)}')">${escapeHtml(label)}</button>`;
+  }).join('');
+}
+function setFilter(cat) {
+  activeFilter = cat;
+  renderFilterBar();
+  renderHomeList();
+}
+
+/* ─────────────────────────────────────────────
+   TYPES
+───────────────────────────────────────────── */
+function selectType(t) {
+  selectedType = t;
+  document.querySelectorAll('.type-chip').forEach(el => {
+    el.classList.toggle('selected', el.dataset.type === t);
+  });
+  // Hide all type-specific input blocks
+  ['nameField','birthdayField','anniversaryNames','memoryField','specialField'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+  // Show the block relevant to this type
+  if (t === 'birthday') {
+    document.getElementById('birthdayField')?.classList.remove('hidden');
+  } else if (t === 'anniversary') {
+    document.getElementById('anniversaryNames')?.classList.remove('hidden');
+  } else if (t === 'memory') {
+    document.getElementById('memoryField')?.classList.remove('hidden');
+  } else if (t === 'special') {
+    document.getElementById('specialField')?.classList.remove('hidden');
+  } else {
+    document.getElementById('nameField')?.classList.remove('hidden');
+  }
+}
+
+function allTypes() {
+  const builtins = BUILTIN_TYPES
+    .filter(t => !state.hiddenTypes.includes(t.key))
+    .map(t => Object.assign({}, t, state.typeOverrides[t.key] || {}));
+  return [...builtins, ...state.customTypes];
+}
+function typeIcon(t) {
+  const m = allTypes().find(x => x.key === t);
+  return m ? m.icon : 'tag';
+}
+function typeLabel(t) {
+  const m = allTypes().find(x => x.key === t);
+  return m ? m.label : (t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Something Special');
+}
+
+function renderTypeGrid() {
+  const grid = document.getElementById('typeGrid');
+  if (!grid) return;
+  grid.innerHTML = allTypes().map(t => {
+    const sel = selectedType === t.key ? 'selected' : '';
+    const safeKey = escapeHtml(t.key);
+    return `
+      <button type="button" data-type="${safeKey}" onclick="selectType('${safeKey}')"
+              class="type-chip ${sel} flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition">
+        <i data-lucide="${escapeHtml(t.icon)}" class="w-5 h-5"></i>
+        <span class="text-xs font-semibold leading-tight text-center">${escapeHtml(t.label)}</span>
+      </button>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+/* ─────────────────────────────────────────────
+   TYPE MANAGER
+───────────────────────────────────────────── */
+let newTypeIconSelected = 'gift';
+let newCatIconSelected = 'folder';
+
+function openTypeManager() {
+  document.getElementById('newTypeLabelInput').value = '';
+  newTypeIconSelected = 'gift';
+  renderTypeIconPicker();
+  renderTypeManagerList();
+  showModal('typeManagerModal');
+  setTimeout(() => lucide.createIcons(), 10);
+}
+function closeTypeManager() { hideModal('typeManagerModal'); }
+
+function renderTypeIconPicker() {
+  const wrap = document.getElementById('newTypeIconPicker');
+  if (!wrap) return;
+  wrap.innerHTML = TYPE_ICON_CHOICES.map(ic => {
+    const sel = ic === newTypeIconSelected
+      ? 'bg-rose-500 text-white border-rose-500'
+      : 'bg-white text-rose-600 border-rose-100 hover:bg-rose-50';
+    return `<button type="button" onclick="pickNewTypeIcon('${ic}')"
+            class="w-9 h-9 rounded-xl border-2 ${sel} flex items-center justify-center transition">
+              <i data-lucide="${ic}" class="w-4 h-4"></i>
+            </button>`;
+  }).join('');
+  lucide.createIcons();
+}
+function pickNewTypeIcon(ic) {
+  newTypeIconSelected = ic;
+  renderTypeIconPicker();
+}
+
+function renderTypeManagerList() {
+  const wrap = document.getElementById('typeManagerList');
+  if (!wrap) return;
+  wrap.innerHTML = allTypes().map(t => {
+    const isBuiltin = BUILTIN_TYPE_KEYS.has(t.key);
+    const usedCount = state.events.filter(e => e.type === t.key).length;
+    const safeKey = escapeHtml(t.key);
+    return `
+      <div class="bg-white rounded-2xl border border-rose-100 p-3 flex items-center gap-3 shadow-soft">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-400 to-rose-600 text-white flex items-center justify-center flex-shrink-0">
+          <i data-lucide="${escapeHtml(t.icon)}" class="w-4 h-4"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-semibold text-cocoa-800 truncate">${escapeHtml(t.label)}</div>
+          <div class="text-[11px] text-cocoa-700/60">
+            ${isBuiltin ? 'Built-in · ' : ''}${usedCount} event${usedCount === 1 ? '' : 's'}
+          </div>
+        </div>
+        ${isBuiltin ? `<span class="text-[10px] font-bold uppercase tracking-wider text-rose-500/70 px-2 py-1 rounded-full bg-rose-50 mr-1">Built-in</span>` : ''}
+        <button onclick="editType('${safeKey}')" class="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center" title="Edit">
+          <i data-lucide="pencil" class="w-4 h-4"></i>
+        </button>
+        <button onclick="deleteType('${safeKey}')" class="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center" title="Delete">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+      </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+function slugifyTypeKey(label) {
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'type';
+  let key = base, i = 2;
+  const used = new Set(allTypes().map(t => t.key));
+  while (used.has(key)) key = `${base}_${i++}`;
+  return key;
+}
+
+function addCustomType() {
+  const labelInput = document.getElementById('newTypeLabelInput');
+  const label = labelInput.value.trim();
+  if (!label) { toast('Please enter a name'); return; }
+  if (allTypes().some(t => t.label.toLowerCase() === label.toLowerCase())) {
+    toast('A type with that name exists'); return;
+  }
+  const key = slugifyTypeKey(label);
+  state.customTypes.push({ key, label, icon: newTypeIconSelected || 'tag' });
+  saveState();
+  labelInput.value = '';
+  newTypeIconSelected = 'gift';
+  renderTypeIconPicker();
+  renderTypeManagerList();
+  renderTypeGrid();
+  toast('Type added');
+}
+
+function editType(key) {
+  const all = allTypes();
+  const t = all.find(x => x.key === key);
+  if (!t) return;
+  const newLabel = prompt('Rename type:', t.label);
+  if (newLabel == null) return;
+  const trimmed = newLabel.trim();
+  if (!trimmed) { toast('Name cannot be empty'); return; }
+  if (all.some(x => x.key !== key && x.label.toLowerCase() === trimmed.toLowerCase())) {
+    toast('Another type already has that name'); return;
+  }
+  const iconAns = prompt(`Icon for "${trimmed}" — pick one of:\n${TYPE_ICON_CHOICES.join(', ')}\n\n(Leave blank to keep "${t.icon}")`, t.icon);
+  const newIcon = (iconAns || '').trim();
+  const finalIcon = (newIcon && TYPE_ICON_CHOICES.includes(newIcon)) ? newIcon : t.icon;
+
+  if (BUILTIN_TYPE_KEYS.has(key)) {
+    state.typeOverrides[key] = { label: trimmed, icon: finalIcon };
+  } else {
+    const ct = state.customTypes.find(x => x.key === key);
+    if (ct) { ct.label = trimmed; ct.icon = finalIcon; }
+  }
+  saveState();
+  renderTypeManagerList();
+  renderTypeGrid();
+  render();
+  toast('Type updated');
+}
+
+function deleteType(key) {
+  const t = allTypes().find(x => x.key === key);
+  if (!t) return;
+  const fallback = allTypes().find(x => x.key !== key);
+  if (!fallback) { toast('You need at least one type'); return; }
+  const used = state.events.filter(e => e.type === key).length;
+  const msg = used
+    ? `Delete "${t.label}"? ${used} event${used === 1 ? '' : 's'} will switch to "${fallback.label}".`
+    : `Delete "${t.label}"?`;
+  if (!confirm(msg)) return;
+
+  if (BUILTIN_TYPE_KEYS.has(key)) {
+    if (!state.hiddenTypes.includes(key)) state.hiddenTypes.push(key);
+    delete state.typeOverrides[key];
+  } else {
+    state.customTypes = state.customTypes.filter(x => x.key !== key);
+  }
+  state.events.forEach(e => { if (e.type === key) e.type = fallback.key; });
+  if (selectedType === key) selectedType = fallback.key;
+  saveState();
+  renderTypeManagerList();
+  renderTypeGrid();
+  render();
+  syncAndroidNotifications();
+  toast('Type deleted');
+}
+
+/* ─────────────────────────────────────────────
+   CATEGORY MANAGER
+───────────────────────────────────────────── */
+function openCategoryManager() {
+  document.getElementById('newCategoryInput').value = '';
+  newCatIconSelected = 'folder';
+  renderCategoryIconPicker();
+  renderCategoryManagerList();
+  showModal('categoryManagerModal');
+  setTimeout(() => lucide.createIcons(), 10);
+}
+function closeCategoryManager() { hideModal('categoryManagerModal'); }
+
+function renderCategoryIconPicker() {
+  const wrap = document.getElementById('newCategoryIconPicker');
+  if (!wrap) return;
+  wrap.innerHTML = CATEGORY_ICON_CHOICES.map(ic => {
+    const sel = ic === newCatIconSelected
+      ? 'bg-rose-500 text-white border-rose-500'
+      : 'bg-white text-rose-600 border-rose-100 hover:bg-rose-50';
+    return `<button type="button" onclick="pickNewCatIcon('${ic}')"
+            class="w-9 h-9 rounded-xl border-2 ${sel} flex items-center justify-center transition">
+              <i data-lucide="${ic}" class="w-4 h-4"></i>
+            </button>`;
+  }).join('');
+  lucide.createIcons();
+}
+function pickNewCatIcon(ic) {
+  newCatIconSelected = ic;
+  renderCategoryIconPicker();
+}
+
+function renderCategoryManagerList() {
+  const wrap = document.getElementById('categoryManagerList');
+  if (!wrap) return;
+  wrap.innerHTML = allCategories().map(cat => {
+    const isPreset = !!findPresetOriginalForDisplay(cat);
+    const usedCount = state.events.filter(e => (e.categories || []).includes(cat)).length;
+    const safeCat = escapeHtml(cat);
+    const safeAttr = cat.replace(/'/g, "\\'");
+    const icon = state.categoryIcons[cat] || 'folder';
+    return `
+      <div class="bg-white rounded-2xl border border-rose-100 p-3 flex items-center gap-3 shadow-soft">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-400 to-rose-600 text-white flex items-center justify-center flex-shrink-0">
+          <i data-lucide="${escapeHtml(icon)}" class="w-4 h-4"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-semibold text-cocoa-800 truncate">${safeCat}</div>
+          <div class="text-[11px] text-cocoa-700/60">
+            ${isPreset ? 'Preset · ' : ''}${usedCount} event${usedCount === 1 ? '' : 's'}
+          </div>
+        </div>
+        ${isPreset ? `<span class="text-[10px] font-bold uppercase tracking-wider text-rose-500/70 px-2 py-1 rounded-full bg-rose-50 mr-1">Preset</span>` : ''}
+        <button onclick="editCategory('${safeAttr}')" class="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center" title="Edit">
+          <i data-lucide="pencil" class="w-4 h-4"></i>
+        </button>
+        <button onclick="deleteCategory('${safeAttr}')" class="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center" title="Delete">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+      </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+function addCustomCategoryFromManager() {
+  const input = document.getElementById('newCategoryInput');
+  const v = input.value.trim();
+  if (!v) { toast('Please enter a name'); return; }
+  if (allCategories().some(c => c.toLowerCase() === v.toLowerCase())) {
+    toast('Category exists'); return;
+  }
+  state.customCategories.push(v);
+  state.categoryIcons[v] = newCatIconSelected || 'folder';
+  saveState();
+  input.value = '';
+  newCatIconSelected = 'folder';
+  renderCategoryIconPicker();
+  renderCategoryManagerList();
+  if (typeof renderCategoryChips === 'function') renderCategoryChips();
+  if (typeof renderFilterBar === 'function') renderFilterBar();
+  toast('Category added');
+}
+
+function editCategory(displayName) {
+  const newName = prompt('Rename category:', displayName);
+  if (newName == null) return;
+  const trimmed = newName.trim();
+  if (!trimmed) { toast('Name cannot be empty'); return; }
+  if (allCategories().some(c => c !== displayName && c.toLowerCase() === trimmed.toLowerCase())) {
+    toast('Another category has that name'); return;
+  }
+  const presetOrig = findPresetOriginalForDisplay(displayName);
+  if (presetOrig) {
+    state.categoryRenames[presetOrig] = trimmed;
+  } else {
+    const idx = state.customCategories.indexOf(displayName);
+    if (idx === -1) return;
+    state.customCategories[idx] = trimmed;
+  }
+  // Migrate icon to new name
+  if (state.categoryIcons[displayName]) {
+    state.categoryIcons[trimmed] = state.categoryIcons[displayName];
+    delete state.categoryIcons[displayName];
+  }
+  // Cascade rename through events
+  state.events.forEach(e => {
+    if (Array.isArray(e.categories)) {
+      e.categories = e.categories.map(c => c === displayName ? trimmed : c);
+    }
+  });
+  if (selectedCategories.has(displayName)) {
+    selectedCategories.delete(displayName);
+    selectedCategories.add(trimmed);
+  }
+  if (activeFilter === displayName) activeFilter = trimmed;
+  saveState();
+  renderCategoryManagerList();
+  if (typeof renderCategoryChips === 'function') renderCategoryChips();
+  if (typeof renderFilterBar === 'function') renderFilterBar();
+  render();
+  toast('Category updated');
+}
+
+function deleteCategory(displayName) {
+  const used = state.events.filter(e => (e.categories || []).includes(displayName)).length;
+  const msg = used
+    ? `Delete "${displayName}"? It will be removed from ${used} event${used === 1 ? '' : 's'}.`
+    : `Delete "${displayName}"?`;
+  if (!confirm(msg)) return;
+  const presetOrig = findPresetOriginalForDisplay(displayName);
+  if (presetOrig) {
+    if (!state.hiddenPresets.includes(presetOrig)) state.hiddenPresets.push(presetOrig);
+    delete state.categoryRenames[presetOrig];
+  } else {
+    state.customCategories = state.customCategories.filter(c => c !== displayName);
+  }
+  delete state.categoryIcons[displayName];
+  state.events.forEach(e => {
+    if (Array.isArray(e.categories)) e.categories = e.categories.filter(c => c !== displayName);
+  });
+  selectedCategories.delete(displayName);
+  if (activeFilter === displayName) activeFilter = 'all';
+  saveState();
+  renderCategoryManagerList();
+  if (typeof renderCategoryChips === 'function') renderCategoryChips();
+  if (typeof renderFilterBar === 'function') renderFilterBar();
+  render();
+  toast('Category deleted');
+}
+
+/* ─────────────────────────────────────────────
+   TABS
+───────────────────────────────────────────── */
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('tab-home').classList.toggle('hidden', tab !== 'home');
+  document.getElementById('tab-calendar').classList.toggle('hidden', tab !== 'calendar');
+  if (tab === 'calendar') renderCalendar();
+}
+
+/* ─────────────────────────────────────────────
+   RENDER — HOME
+───────────────────────────────────────────── */
+function render() {
+  renderFilterBar();
+  if (currentTab === 'home') renderHomeList();
+  else renderCalendar();
+}
+
+function getFilteredEvents() {
+  const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+  return state.events.filter(ev => {
+    if (activeFilter !== 'all' && !(ev.categories || []).includes(activeFilter)) return false;
+    if (q) {
+      const hay = [ev.name, ev.notes, ev.location, (ev.categories||[]).join(' ')].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderHomeList() {
+  const events = getFilteredEvents()
+    .map(ev => ({ ev, days: daysUntilNext(ev) }))
+    .sort((a, b) => a.days - b.days);
+
+  document.getElementById('upcomingCount').textContent =
+    events.length ? `${events.length} event${events.length > 1 ? 's' : ''}` : '';
+
+  // Highlight: nearest event
+  const hiWrap = document.getElementById('nextHighlight');
+  if (events.length && events[0].days <= 30) {
+    hiWrap.innerHTML = renderHighlight(events[0].ev, events[0].days);
+  } else {
+    hiWrap.innerHTML = '';
+  }
+
+  const list = document.getElementById('eventList');
+  if (events.length === 0) {
+    list.innerHTML = renderEmpty();
+  } else {
+    // Skip the highlight from the list to avoid duplication
+    const rest = (hiWrap.innerHTML ? events.slice(1) : events);
+    list.innerHTML = rest.map(({ ev, days }) => renderEventCard(ev, days)).join('') || renderEmpty('No more upcoming events.');
+  }
+  lucide.createIcons();
+}
+
+/* Decorative emoji clusters scattered across the Up Next card.
+   Each entry: [emoji, top%, right%, rotation°, opacity, fontSizePx]. */
+const HIGHLIGHT_DECOR = {
+  birthday:    [['🎂', -8, -4, 12, 0.22, 96], ['🧁', 12, 22, -10, 0.16, 44], ['🎁', 56, 8, 8, 0.18, 52], ['🎉', 78, 28, -16, 0.16, 40], ['✨', 30, 46, 0, 0.20, 28]],
+  anniversary: [['💕', -6, -2, 10, 0.22, 92], ['❤️', 18, 22, -8, 0.18, 44], ['👫', 56, 6, 6, 0.22, 60], ['🌹', 78, 26, -12, 0.16, 40], ['💍', 32, 44, 0, 0.18, 32]],
+  memory:      [['📷', -6, -2, 10, 0.22, 92], ['🎞️', 16, 22, -8, 0.18, 48], ['🌟', 56, 8, 6, 0.18, 44], ['📸', 78, 28, -12, 0.16, 40], ['✨', 32, 46, 0, 0.20, 28]],
+  special:     [['✨', -4, -2, 10, 0.22, 92], ['🌟', 18, 22, -8, 0.20, 44], ['🎊', 56, 8, 6, 0.20, 52], ['⭐', 78, 28, -12, 0.18, 40], ['💫', 32, 46, 0, 0.18, 32]],
+};
+const DEFAULT_HIGHLIGHT_DECOR = [['🎂', -8, -4, 12, 0.20, 88], ['✨', 28, 22, -8, 0.18, 36], ['🎉', 70, 10, 8, 0.18, 44]];
+
+function renderHighlightDecor(type) {
+  const set = HIGHLIGHT_DECOR[type] || DEFAULT_HIGHLIGHT_DECOR;
+  return set.map(([emoji, top, right, rot, op, size]) =>
+    `<div class="absolute select-none pointer-events-none" style="top:${top}%; right:${right}%; transform:rotate(${rot}deg); opacity:${op}; font-size:${size}px; line-height:1;">${emoji}</div>`
+  ).join('');
+}
+
+function renderHighlight(ev, days) {
+  const next = nextOccurrenceDate(ev);
+  const age = ageOnNext(ev);
+
+  // Unified brand-blue gradient (uses the app's rose 400 → 500 → 600 → 700 palette,
+  // which in this theme is a teal-to-navy ramp).
+  const grad = 'linear-gradient(135deg, #54acbf 0%, #26658c 50%, #012744 100%)';
+
+  // Optional user image as a subtle backdrop
+  const img = ev.image
+    ? `<img src="${escAttr(ev.image)}" class="absolute inset-0 w-full h-full object-cover opacity-20" onerror="this.style.display='none'">`
+    : '';
+
+  // Type-specific scattered emoji decorations
+  const decor = renderHighlightDecor(ev.type);
+
+  // Sub-label below name
+  let subLabel = '';
+  if (ev.type === 'birthday' && ev.nickname) subLabel = `<div class="text-sm text-white/90 italic mt-0.5">"${escapeHtml(ev.nickname)}"</div>`;
+  if (ev.type === 'anniversary' && ev.anniversaryType) subLabel = `<div class="text-sm text-white/90 mt-0.5">${escapeHtml(ev.anniversaryType)} Anniversary</div>`;
+
+  return `
+    <div onclick="openDetail('${ev.id}')" class="relative overflow-hidden rounded-3xl text-white p-6 mb-5 shadow-soft-lg cursor-pointer" style="background:${grad}">
+      ${img}
+      <!-- subtle inner highlight to give the gradient depth -->
+      <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(circle at 85% 0%, rgba(167,235,242,0.35), transparent 55%), radial-gradient(circle at 0% 100%, rgba(1,28,64,0.35), transparent 50%);"></div>
+      ${decor}
+      <div class="relative">
+        <div class="flex items-center gap-2 text-white/80 text-xs font-semibold uppercase tracking-wider mb-1.5">
+          <i data-lucide="${typeIcon(ev.type)}" class="w-4 h-4"></i> Up next
+        </div>
+        <div class="font-display font-bold text-2xl mb-1">${escapeHtml(ev.name)}</div>
+        ${subLabel}
+        <div class="text-sm text-white/90 mt-1">${MONTHS_FULL[ev.month-1]} ${ev.day}${ev.year ? ', ' + ev.year : ''}</div>
+        <div class="mt-4 inline-flex items-center gap-2 bg-white/25 backdrop-blur px-3 py-1.5 rounded-full text-sm font-bold">
+          <i data-lucide="clock" class="w-4 h-4"></i> ${countdownText(days)}
+        </div>
+        ${age != null && age > 0 ? `<div class="mt-2 text-xs text-white/85">Turning ${age} ${ev.type === 'anniversary' ? 'years' : ''}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+/* Per-type card color themes */
+const TYPE_CARD_THEMES = {
+  birthday:    { cardBg:'#d8eef7', cardBorder:'#26658C', iconGrad:'linear-gradient(135deg,#023859,#011C40)', textAccent:'#023859' }, // steel blue bg + dark blue icon
+  anniversary: { cardBg:'#fff0f0', cardBorder:'#fca5a5', iconGrad:'linear-gradient(135deg,#f87171,#dc2626)', textAccent:'#b91c1c' }, // red
+  memory:      { cardBg:'#fff8ec', cardBorder:'#fcd97a', iconGrad:'linear-gradient(135deg,#fbbf24,#d97706)', textAccent:'#b45309' }, // amber
+  special:     { cardBg:'#f5f0ff', cardBorder:'#c4b5fd', iconGrad:'linear-gradient(135deg,#a78bfa,#7c3aed)', textAccent:'#6d28d9' }, // purple
+};
+const DEFAULT_CARD_THEME = { cardBg:'#edfbfd', cardBorder:'#54ACBF', iconGrad:'linear-gradient(135deg,#54ACBF,#26658C)', textAccent:'#26658C' }; // teal fallback
+
+function cardTheme(type) {
+  return TYPE_CARD_THEMES[type] || DEFAULT_CARD_THEME;
+}
+function typeCardTheme(type) { return cardTheme(type); }
+
+function renderEventCard(ev, days) {
+  const theme = cardTheme(ev.type);
+  const next = nextOccurrenceDate(ev);
+  const age = ageOnNext(ev);
+  const cdColor = days === 0 ? 'bg-rose-500 text-white'
+                : days === 1 ? 'bg-rose-100 text-rose-700'
+                : days <= 7  ? 'bg-amber-100 text-amber-700'
+                :              'bg-cream-100 text-cocoa-700';
+  const cats = (ev.categories || []).slice(0, 2).map(c =>
+    `<span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 font-semibold">${escapeHtml(c)}</span>`
+  ).join('');
+  const imgEl = ev.image
+    ? `<img src="${escAttr(ev.image)}" class="w-14 h-14 rounded-2xl object-cover flex-shrink-0" onerror="this.outerHTML='<div class=\\'w-14 h-14 rounded-2xl flex items-center justify-center text-white flex-shrink-0\\' style=\\'background:${escAttr(theme.iconGrad)}\\'><i data-lucide=&quot;${typeIcon(ev.type)}&quot; class=\\'w-6 h-6\\'></i></div>'">`
+    : `<div class="w-14 h-14 rounded-2xl flex items-center justify-center text-white flex-shrink-0" style="background:${theme.iconGrad}">
+         <i data-lucide="${typeIcon(ev.type)}" class="w-6 h-6"></i>
+       </div>`;
+
+  // Build sub-label: nickname for birthday, anniversaryType for anniversary
+  let subLabel = '';
+  if (ev.type === 'birthday' && ev.nickname) subLabel = `<span class="text-[11px] font-semibold" style="color:${theme.textAccent}">"${escapeHtml(ev.nickname)}"</span>`;
+  if (ev.type === 'anniversary' && ev.anniversaryType) subLabel = `<span class="text-[11px] font-semibold" style="color:${theme.textAccent}">${escapeHtml(ev.anniversaryType)} Anniversary</span>`;
+
+  return `
+    <div onclick="openDetail('${ev.id}')" class="rounded-2xl p-4 shadow-soft hover:shadow-soft-lg transition cursor-pointer flex items-center gap-3" style="background:${theme.cardBg}; border: 1.5px solid ${theme.cardBorder};">
+      ${imgEl}
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-0.5">
+          <span class="font-display font-bold text-cocoa-800 truncate">${escapeHtml(ev.name)}</span>
+        </div>
+        ${subLabel ? `<div class="mb-0.5">${subLabel}</div>` : ''}
+        <div class="flex items-center gap-1.5 text-xs text-cocoa-700/70 mb-1">
+          <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+          <span>${MONTHS_SHORT[ev.month-1]} ${ev.day}${ev.year ? ', ' + ev.year : ''}</span>
+          ${age != null && age > 0 ? `<span class="font-semibold" style="color:${theme.textAccent}">· ${ev.type==='birthday'?'turning':'+' } ${age}</span>` : ''}
+        </div>
+        ${cats ? `<div class="flex gap-1 flex-wrap">${cats}</div>` : ''}
+      </div>
+      <div class="text-right flex-shrink-0">
+        <span class="inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold ${cdColor}">${countdownText(days)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderEmpty(msg) {
+  return `
+    <div class="text-center py-12">
+      <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-rose-50 flex items-center justify-center text-rose-400">
+        <i data-lucide="cake" class="w-10 h-10"></i>
+      </div>
+      <div class="font-display font-bold text-lg text-cocoa-800">${msg || 'No events yet'}</div>
+      <p class="text-sm text-cocoa-700/60 mt-1">Tap the <span class="font-semibold text-rose-500">+</span> button to add your first event.</p>
+    </div>
+  `;
+}
+
+/* ─────────────────────────────────────────────
+   RENDER — CALENDAR
+───────────────────────────────────────────── */
+function changeMonth(delta) {
+  let m = calCursor.month + delta;
+  let y = calCursor.year;
+  if (m < 0)  { m = 11; y--; }
+  if (m > 11) { m = 0;  y++; }
+  calCursor = { year: y, month: m };
+  calSelectedDay = null;
+  renderCalendar();
+}
+function goToToday() {
+  const d = new Date();
+  calCursor = { year: d.getFullYear(), month: d.getMonth() };
+  calSelectedDay = d.getDate();
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const { year, month } = calCursor;
+  document.getElementById('calMonthLabel').textContent = `${MONTHS_FULL[month]} ${year}`;
+
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const prevDays = new Date(year, month, 0).getDate();
+  const today = new Date();
+  const isCurrentMonth = (today.getFullYear() === year && today.getMonth() === month);
+
+  // Map: day-of-month (1-31) → events occurring this month
+  // Auto-repeat: any event with month === current cal month appears every year
+  const eventsThisMonth = state.events.filter(ev => ev.month - 1 === month);
+  const dayMap = {};
+  eventsThisMonth.forEach(ev => {
+    if (!dayMap[ev.day]) dayMap[ev.day] = [];
+    dayMap[ev.day].push(ev);
+  });
+
+  const cells = [];
+
+  // Leading days (prev month)
+  for (let i = firstDow - 1; i >= 0; i--) {
+    cells.push(`<div class="cal-cell muted">${prevDays - i}</div>`);
+  }
+  // Current month
+  for (let d = 1; d <= daysInMonth; d++) {
+    const has = !!dayMap[d];
+    const isToday = isCurrentMonth && today.getDate() === d;
+    const isSel = calSelectedDay === d;
+    const cls = [
+      'cal-cell',
+      has ? 'has-event' : '',
+      isToday ? 'today' : '',
+      isSel ? 'selected' : ''
+    ].filter(Boolean).join(' ');
+    const dots = has
+      ? `<div class="cal-dots">${dayMap[d].slice(0,3).map(() => '<div class="cal-dot"></div>').join('')}</div>`
+      : '';
+    cells.push(`<div class="${cls}" onclick="selectCalDay(${d})">${d}${dots}</div>`);
+  }
+  // Trailing days
+  const total = cells.length;
+  const trail = (7 - (total % 7)) % 7;
+  for (let i = 1; i <= trail; i++) {
+    cells.push(`<div class="cal-cell muted">${i}</div>`);
+  }
+
+  document.getElementById('calGrid').innerHTML = cells.join('');
+
+  // Event list below
+  renderMonthEvents();
+  lucide.createIcons();
+}
+
+function selectCalDay(d) {
+  calSelectedDay = (calSelectedDay === d) ? null : d;
+  renderCalendar();
+}
+
+function renderMonthEvents() {
+  const { year, month } = calCursor;
+  let list = state.events.filter(ev => ev.month - 1 === month);
+  if (calSelectedDay) list = list.filter(ev => ev.day === calSelectedDay);
+  list.sort((a, b) => a.day - b.day);
+
+  const wrap = document.getElementById('monthEventList');
+  if (list.length === 0) {
+    wrap.innerHTML = `
+      <div class="text-center py-8 bg-white rounded-2xl border border-rose-50 shadow-soft">
+        <div class="text-rose-300 mb-2"><i data-lucide="calendar-x" class="w-8 h-8 mx-auto"></i></div>
+        <div class="text-sm font-semibold text-cocoa-700">${calSelectedDay ? `Nothing on ${MONTHS_SHORT[month]} ${calSelectedDay}` : 'No events this month'}</div>
+      </div>`;
+  } else {
+    wrap.innerHTML = list.map(ev => {
+      const occurrence = new Date(year, month, ev.day);
+      const today = todayMid();
+      const days = Math.round((occurrence - today) / 86400000);
+      const cdColor = days < 0 ? 'bg-cream-100 text-cocoa-700/70' :
+                      days === 0 ? 'bg-rose-500 text-white' :
+                      days <= 7  ? 'bg-amber-100 text-amber-700' :
+                                   'bg-rose-50 text-rose-700';
+      const cdText = days < 0 ? `${-days}d ago` : days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`;
+      return `
+        <div onclick="openDetail('${ev.id}')" class="bg-white rounded-2xl p-4 shadow-soft border border-rose-50 hover:shadow-soft-lg transition cursor-pointer flex items-center gap-3">
+          <div class="text-center w-12 flex-shrink-0">
+            <div class="text-[10px] uppercase tracking-wider text-rose-400 font-bold">${MONTHS_SHORT[month]}</div>
+            <div class="font-display text-2xl font-bold text-rose-600 leading-none">${ev.day}</div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-display font-bold text-cocoa-800 truncate">${escapeHtml(ev.name)}</div>
+            <div class="flex items-center gap-1.5 text-xs text-cocoa-700/70 mt-0.5">
+              <i data-lucide="${typeIcon(ev.type)}" class="w-3.5 h-3.5"></i>
+              <span>${typeLabel(ev.type)}</span>
+              ${ev.year ? `<span>· ${ev.year}</span>` : ''}
+            </div>
+          </div>
+          <span class="px-2.5 py-1 rounded-lg text-[11px] font-bold ${cdColor}">${cdText}</span>
+        </div>`;
+    }).join('');
+  }
+  lucide.createIcons();
+}
+
+/* ─────────────────────────────────────────────
+   ADD/EDIT MODAL
+───────────────────────────────────────────── */
+function openAddModal() {
+  editingId = null;
+  selectedType = 'birthday';
+  selectedCategories = new Set();
+  document.getElementById('modalTitle').textContent = 'Add Event';
+  document.getElementById('saveBtn').textContent = 'Save Event';
+  document.getElementById('deleteBtn').classList.add('hidden');
+  document.getElementById('evName').value = '';
+  document.getElementById('evGroom').value = '';
+  document.getElementById('evBride').value = '';
+  document.getElementById('evBirthdayPerson').value = '';
+  document.getElementById('evNickname').value = '';
+  document.getElementById('evAnniversaryType').value = '';
+  document.getElementById('evMemoryDesc').value = '';
+  document.getElementById('evSpecialDesc').value = '';
+  document.getElementById('evMonth').value = '';
+  document.getElementById('evDay').value = '';
+  document.getElementById('evYear').value = '';
+  document.getElementById('evMobile').value = '';
+  document.getElementById('evLocation').value = '';
+  document.getElementById('evNotes').value = '';
+  clearImage();
+  selectType('birthday');
+  renderTypeGrid();
+  renderCategoryChips();
+  showModal('eventModal');
+}
+
+function openEditModal(id) {
+  const ev = state.events.find(e => e.id === id);
+  if (!ev) return;
+  editingId = id;
+  selectedType = ev.type;
+  selectedCategories = new Set(ev.categories || []);
+  document.getElementById('modalTitle').textContent = 'Edit Event';
+  document.getElementById('saveBtn').textContent = 'Update Event';
+  document.getElementById('deleteBtn').classList.remove('hidden');
+  document.getElementById('evName').value = ev.name || '';
+  // Anniversary couple names: prefer stored fields, fallback to splitting name
+  let groom = ev.groomName || '';
+  let bride = ev.brideName || '';
+  if (ev.type === 'anniversary' && (!groom || !bride) && ev.name) {
+    const parts = ev.name.split(/\s*(?:&|and)\s*/i);
+    if (parts.length === 2) { groom = groom || parts[0].trim(); bride = bride || parts[1].trim(); }
+  }
+  document.getElementById('evGroom').value = groom;
+  document.getElementById('evBride').value = bride;
+  document.getElementById('evMonth').value = ev.month || '';
+  document.getElementById('evDay').value = ev.day || '';
+  document.getElementById('evYear').value = ev.year || '';
+  document.getElementById('evMobile').value = ev.mobile || '';
+  document.getElementById('evLocation').value = ev.location || '';
+  document.getElementById('evNotes').value = ev.notes || '';
+  document.getElementById('evBirthdayPerson').value = ev.birthdayPerson || (ev.type === 'birthday' ? ev.name : '') || '';
+  document.getElementById('evNickname').value = ev.nickname || '';
+  document.getElementById('evAnniversaryType').value = ev.anniversaryType || '';
+  document.getElementById('evMemoryDesc').value = ev.memoryDesc || (ev.type === 'memory' ? ev.name : '') || '';
+  document.getElementById('evSpecialDesc').value = ev.specialDesc || (ev.type === 'special' ? ev.name : '') || '';
+  if (ev.image) showImage(ev.image);
+  else clearImage();
+  selectType(ev.type);
+  renderTypeGrid();
+  renderCategoryChips();
+  showModal('eventModal');
+}
+
+/* ─────────────────────────────────────────────
+   SMART BACK-PRESS (Event Modal)
+───────────────────────────────────────────── */
+let modalBackPressTime = 0;
+
+function hasUnsavedInput() {
+  const fields = ['evName','evGroom','evBride','evNotes','evMobile','evLocation'];
+  if (fields.some(id => (document.getElementById(id)?.value || '').trim())) return true;
+  if (document.getElementById('evMonth')?.value) return true;
+  if (document.getElementById('evDay')?.value) return true;
+  const previewEl = document.getElementById('imgPreview');
+  if (previewEl && !previewEl.classList.contains('hidden') && previewEl.src) return true;
+  return false;
+}
+
+function closeModal() {
+  // If editing existing event, close immediately — changes are intentional
+  if (editingId) { hideModal('eventModal'); return; }
+  if (!hasUnsavedInput()) { hideModal('eventModal'); return; }
+  const now = Date.now();
+  if (now - modalBackPressTime < 2000) {
+    hideModal('eventModal');
+    modalBackPressTime = 0;
+  } else {
+    modalBackPressTime = now;
+    toast('Press back again to discard changes');
+  }
+}
+
+/* ─────────────────────────────────────────────
+   SWIPE GESTURE NAVIGATION
+───────────────────────────────────────────── */
+(function initSwipeNav() {
+  let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+  const MIN_SWIPE_X = 55;   // px horizontal threshold
+  const MAX_SWIPE_Y = 80;   // px vertical max (so we don't steal scrolls)
+  const MAX_DURATION = 400; // ms
+
+  function isAnyModalOpen() {
+    return ['eventModal','detailModal','settingsModal','notifModal','typeManagerModal','categoryManagerModal','imgSourceSheet','cropperModal','restorePicker']
+      .some(id => { const el = document.getElementById(id); return el && !el.classList.contains('hidden'); });
+  }
+
+  document.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  document.addEventListener('touchend', (e) => {
+    if (isAnyModalOpen()) return;
+    if (Date.now() - touchStartTime > MAX_DURATION) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    if (Math.abs(dy) > MAX_SWIPE_Y) return; // mostly vertical — don't intercept
+    if (Math.abs(dx) < MIN_SWIPE_X) return;
+    if (dx < 0 && currentTab === 'home') {
+      // Swipe left → Calendar
+      switchTab('calendar');
+    } else if (dx > 0 && currentTab === 'calendar') {
+      // Swipe right → Home
+      switchTab('home');
+    }
+  }, { passive: true });
+})();
+
+function saveEvent() {
+  let name = document.getElementById('evName').value.trim();
+  const groomName = document.getElementById('evGroom').value.trim();
+  const brideName = document.getElementById('evBride').value.trim();
+  const birthdayPerson = document.getElementById('evBirthdayPerson').value.trim();
+  const nickname = document.getElementById('evNickname').value.trim();
+  const anniversaryType = document.getElementById('evAnniversaryType').value.trim();
+  const memoryDesc = document.getElementById('evMemoryDesc').value.trim();
+  const specialDesc = document.getElementById('evSpecialDesc').value.trim();
+  const month = parseInt(document.getElementById('evMonth').value);
+  const day   = parseInt(document.getElementById('evDay').value);
+  const yr    = document.getElementById('evYear').value.trim();
+  const year  = yr ? parseInt(yr) : null;
+  const mobile = document.getElementById('evMobile').value.trim();
+  const location = document.getElementById('evLocation').value.trim();
+  const notes = document.getElementById('evNotes').value.trim();
+  const previewEl = document.getElementById('imgPreview');
+  const image = (previewEl.src && !previewEl.classList.contains('hidden')) ? previewEl.src : '';
+
+  // Derive name from type-specific fields
+  if (selectedType === 'birthday') {
+    if (!birthdayPerson) { toast("Please enter whose birthday it is"); return; }
+    name = birthdayPerson;
+  } else if (selectedType === 'anniversary') {
+    if (!groomName || !brideName) { toast('Please enter both partner names'); return; }
+    name = `${groomName} & ${brideName}`;
+  } else if (selectedType === 'memory') {
+    if (!memoryDesc) { toast('Please describe what happened on that day'); return; }
+    name = memoryDesc;
+  } else if (selectedType === 'special') {
+    if (!specialDesc) { toast("Please describe what's special"); return; }
+    name = specialDesc;
+  }
+
+  if (!name) { toast('Please enter a name'); return; }
+  if (!month || !day) { toast('Please pick a month and day'); return; }
+  if (!isValidDay(month, day)) { toast('That day is invalid for this month'); return; }
+  if (year && (year < 1900 || year > 2100)) { toast('Year out of range'); return; }
+
+  const data = {
+    name, type: selectedType, month, day, year,
+    mobile, location, notes, image,
+    categories: Array.from(selectedCategories),
+    groomName: selectedType === 'anniversary' ? groomName : null,
+    brideName: selectedType === 'anniversary' ? brideName : null,
+    birthdayPerson: selectedType === 'birthday' ? birthdayPerson : null,
+    nickname: selectedType === 'birthday' ? nickname : null,
+    anniversaryType: selectedType === 'anniversary' ? anniversaryType : null,
+    memoryDesc: selectedType === 'memory' ? memoryDesc : null,
+    specialDesc: selectedType === 'special' ? specialDesc : null,
+  };
+
+  if (editingId) {
+    const ev = state.events.find(e => e.id === editingId);
+    Object.assign(ev, data);
+    toast('Event updated');
+  } else {
+    state.events.push({
+      id: 'ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+      createdAt: Date.now(),
+      ...data,
+    });
+    toast('Event added 🎂');
+  }
+  saveState();
+  // Use hideModal directly — we just saved, no discard guard needed
+  hideModal('eventModal');
+  modalBackPressTime = 0;
+  render();
+  syncAndroidNotifications();
+}
+
+let deleteConfirmTime = 0;
+
+function deleteEvent() {
+  if (!editingId) return;
+  const now = Date.now();
+  if (now - deleteConfirmTime < 2500) {
+    // Second tap within 2.5 s — actually delete
+    const id = editingId;
+    state.events = state.events.filter(e => e.id !== id);
+    saveState();
+    editingId = null;
+    detailId = null;
+    deleteConfirmTime = 0;
+    hideModal('eventModal');
+    hideModal('detailModal');
+    render();
+    syncAndroidNotifications();
+    toast('Event deleted');
+  } else {
+    deleteConfirmTime = now;
+    toast('Tap Delete again to confirm');
+  }
+}
+
+function isValidDay(month, day) {
+  if (day < 1 || day > 31) return false;
+  // Use 2024 (leap year) so Feb 29 is allowed
+  const test = new Date(2024, month - 1, day);
+  return test.getMonth() === month - 1 && test.getDate() === day;
+}
+
+/* ─────────────────────────────────────────────
+   DETAIL MODAL
+───────────────────────────────────────────── */
+function openDetail(id) {
+  const ev = state.events.find(e => e.id === id);
+  if (!ev) return;
+  detailId = id;
+  const days = daysUntilNext(ev);
+  const next = nextOccurrenceDate(ev);
+  const age = ageOnNext(ev);
+  const cats = (ev.categories || []).map(c =>
+    `<span class="px-3 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">${escapeHtml(c)}</span>`
+  ).join('');
+
+  document.getElementById('detailBody').innerHTML = `
+    ${ev.image
+      ? `<div class="relative h-48 bg-rose-100"><img src="${escAttr(ev.image)}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-gradient-to-br from-rose-200 to-rose-400 flex items-center justify-center\\'><i data-lucide=&quot;${typeIcon(ev.type)}&quot; class=\\'w-16 h-16 text-white\\'></i></div>'"></div>`
+      : `<div class="h-48 bg-gradient-to-br from-rose-300 to-rose-500 flex items-center justify-center"><i data-lucide="${typeIcon(ev.type)}" class="w-20 h-20 text-white"></i></div>`
+    }
+    <div class="p-5 space-y-4">
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-rose-500 font-bold mb-1">${typeLabel(ev.type)}</div>
+        <div class="font-display font-bold text-2xl text-cocoa-800">${escapeHtml(ev.name)}</div>
+        ${ev.nickname ? `<div class="text-sm text-cocoa-700/70 mt-0.5 italic">"${escapeHtml(ev.nickname)}"</div>` : ''}
+        ${ev.anniversaryType ? `<div class="text-sm text-purple-600 font-semibold mt-0.5">${escapeHtml(ev.anniversaryType)} Anniversary</div>` : ''}
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 border border-rose-50 shadow-soft">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2 text-cocoa-700">
+            <i data-lucide="calendar" class="w-4 h-4 text-rose-500"></i>
+            <span class="text-sm font-semibold">${MONTHS_FULL[ev.month-1]} ${ev.day}${ev.year ? ', ' + ev.year : ''}</span>
+          </div>
+          <span class="text-xs px-2.5 py-1 rounded-lg ${days === 0 ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-700'} font-bold">${countdownText(days)}</span>
+        </div>
+        <div class="text-xs text-cocoa-700/70">Next: ${MONTHS_FULL[next.getMonth()]} ${next.getDate()}, ${next.getFullYear()}${age != null && age > 0 ? ` · ${ev.type==='birthday'?'turning':'celebrating'} ${age}` : ''}</div>
+      </div>
+
+      ${cats ? `<div><div class="text-[10px] uppercase tracking-wider text-rose-500 font-bold mb-2">Categories</div><div class="flex flex-wrap gap-2">${cats}</div></div>` : ''}
+
+      ${ev.mobile ? `
+        <div class="flex items-center gap-3 bg-white rounded-2xl p-4 border border-rose-50 shadow-soft">
+          <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600"><i data-lucide="phone" class="w-4 h-4"></i></div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[10px] uppercase tracking-wider text-rose-500 font-bold">Mobile</div>
+            <div class="text-sm font-semibold text-cocoa-800 truncate">${escapeHtml(ev.mobile)}</div>
+          </div>
+          <a href="tel:${escAttr(ev.mobile)}" class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 hover:bg-rose-200 flex items-center justify-center" title="Call">
+            <i data-lucide="phone-call" class="w-4 h-4"></i>
+          </a>
+          <button onclick="openWhatsApp('${escAttr(ev.mobile)}')" class="w-10 h-10 rounded-full bg-emerald-500 text-white hover:bg-emerald-600 flex items-center justify-center" title="Open in WhatsApp">
+            ${WHATSAPP_SVG}
+          </button>
+        </div>
+      ` : ''}
+
+      ${ev.location ? `
+        <div class="flex items-center gap-3 bg-white rounded-2xl p-4 border border-rose-50 shadow-soft">
+          <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600"><i data-lucide="map-pin" class="w-4 h-4"></i></div>
+          <div class="flex-1"><div class="text-[10px] uppercase tracking-wider text-rose-500 font-bold">Location</div><div class="text-sm font-semibold text-cocoa-800">${escapeHtml(ev.location)}</div></div>
+        </div>
+      ` : ''}
+
+      ${ev.notes ? `
+        <div class="bg-white rounded-2xl p-4 border border-rose-50 shadow-soft">
+          <div class="text-[10px] uppercase tracking-wider text-rose-500 font-bold mb-1.5">Notes</div>
+          <div class="text-sm text-cocoa-800 whitespace-pre-wrap leading-relaxed">${escapeHtml(ev.notes)}</div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+  showModal('detailModal');
+  lucide.createIcons();
+}
+
+function closeDetail() { hideModal('detailModal'); detailId = null; }
+function editFromDetail() { const id = detailId; closeDetail(); if (id) openEditModal(id); }
+
+/* ─────────────────────────────────────────────
+   IMAGE HANDLING
+───────────────────────────────────────────── */
+function clearImage() {
+  const img = document.getElementById('imgPreview');
+  img.src = '';
+  img.classList.add('hidden');
+  document.getElementById('imgPlaceholder').classList.remove('hidden');
+  document.getElementById('imgRemoveBtn').classList.add('hidden');
+  const cam = document.getElementById('imgFileCamera');
+  const gal = document.getElementById('imgFileGallery');
+  if (cam) cam.value = '';
+  if (gal) gal.value = '';
+}
+function showImage(src) {
+  const img = document.getElementById('imgPreview');
+  img.src = src;
+  img.classList.remove('hidden');
+  document.getElementById('imgPlaceholder').classList.add('hidden');
+  document.getElementById('imgRemoveBtn').classList.remove('hidden');
+}
+
+function handleImageFile(e) {
+  const file = e.target.files[0];
+  // Always reset the input so picking the same file twice still fires onchange
+  const inputEl = e.target;
+  if (!file) { inputEl.value = ''; return; }
+  if (!file.type || !file.type.startsWith('image/')) {
+    toast('Please pick an image file');
+    inputEl.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    inputEl.value = ''; // reset for next pick
+    openCropper(reader.result);
+  };
+  reader.onerror = () => {
+    inputEl.value = '';
+    toast("Couldn't read that image");
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ─────────────────────────────────────────────
+   IMAGE SOURCE PICKER (Camera vs Gallery)
+───────────────────────────────────────────── */
+function openImageSourceSheet() {
+  showModal('imgSourceSheet');
+}
+function closeImageSourceSheet() {
+  hideModal('imgSourceSheet');
+}
+function pickImageSource(source) {
+  closeImageSourceSheet();
+  // Slight delay so the action-sheet animation doesn't fight the file picker
+  setTimeout(() => {
+    const id = source === 'camera' ? 'imgFileCamera' : 'imgFileGallery';
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.value = '';
+    input.click();
+  }, 120);
+}
+
+/* ─────────────────────────────────────────────
+   IMAGE CROPPER
+───────────────────────────────────────────── */
+let cropperInstance = null;
+let cropperFlipState = { h: 1, v: 1 };
+
+function openCropper(dataUrl) {
+  const img = document.getElementById('cropperImage');
+  if (!img) return;
+  // Destroy any prior instance
+  if (cropperInstance) { try { cropperInstance.destroy(); } catch (e) {} cropperInstance = null; }
+  cropperFlipState = { h: 1, v: 1 };
+
+  // Show the modal first so the image's parent has measurable dimensions
+  showModal('cropperModal');
+
+  const initCropper = () => {
+    if (typeof Cropper === 'undefined') {
+      toast('Cropper failed to load. Saving original.');
+      showImage(dataUrl);
+      hideModal('cropperModal');
+      return;
+    }
+    cropperInstance = new Cropper(img, {
+      viewMode: 1,
+      autoCropArea: 0.9,
+      background: false,
+      responsive: true,
+      movable: true,
+      zoomable: true,
+      rotatable: true,
+      scalable: true,
+      dragMode: 'move',
+      toggleDragModeOnDblclick: false,
+    });
+  };
+
+  // Attach load listener BEFORE setting src so re-opens fire reliably
+  img.addEventListener('load', initCropper, { once: true });
+  img.addEventListener('error', () => {
+    toast("Couldn't load image for cropping");
+    hideModal('cropperModal');
+  }, { once: true });
+  // Bust any browser cache for repeat data-URL picks
+  img.src = '';
+  img.src = dataUrl;
+}
+
+function cropperSetAspect(ratio) {
+  if (cropperInstance) cropperInstance.setAspectRatio(ratio);
+}
+function cropperRotate(deg) {
+  if (cropperInstance) cropperInstance.rotate(deg);
+}
+function cropperFlip() {
+  if (!cropperInstance) return;
+  cropperFlipState.h *= -1;
+  cropperInstance.scaleX(cropperFlipState.h);
+}
+function cropperReset() {
+  if (cropperInstance) {
+    cropperInstance.reset();
+    cropperFlipState = { h: 1, v: 1 };
+  }
+}
+
+function cancelCrop() {
+  if (cropperInstance) { try { cropperInstance.destroy(); } catch (e) {} cropperInstance = null; }
+  hideModal('cropperModal');
+}
+
+function applyCrop() {
+  if (!cropperInstance) { hideModal('cropperModal'); return; }
+  // Cap the output to keep localStorage healthy. JPEG quality 0.85 ≈ great quality, modest size.
+  const canvas = cropperInstance.getCroppedCanvas({
+    maxWidth: 1600,
+    maxHeight: 1600,
+    imageSmoothingEnabled: true,
+    imageSmoothingQuality: 'high',
+  });
+  if (!canvas) { toast('Could not crop image'); return; }
+  const out = canvas.toDataURL('image/jpeg', 0.85);
+  showImage(out);
+  cropperInstance.destroy();
+  cropperInstance = null;
+  hideModal('cropperModal');
+}
+
+/* ─────────────────────────────────────────────
+   MODAL HELPERS
+───────────────────────────────────────────── */
+function showModal(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('hidden'); el.classList.add('flex');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => lucide.createIcons(), 10);
+}
+function hideModal(id) {
+  const el = document.getElementById(id);
+  el.classList.add('hidden'); el.classList.remove('flex');
+  // Reset any in-flight swipe transform so reopening starts clean
+  const panel = el.querySelector('.swipe-panel');
+  if (panel) {
+    panel.classList.remove('swipe-snap');
+    panel.style.transform = '';
+  }
+  document.body.style.overflow = '';
+}
+
+/* ─────────────────────────────────────────────
+   SWIPE-DOWN-TO-CLOSE GESTURE
+   Attaches once at boot. Each `.swipe-panel[data-swipe-close]`
+   element gets a touch handler that translates the panel
+   downward when the user drags from the top of its scroll area;
+   if released past the threshold, the close fn (referenced by
+   data-swipe-close) is invoked.
+───────────────────────────────────────────── */
+const SWIPE_CLOSE_THRESHOLD_PX = 110;
+
+function attachSwipeClosePanels() {
+  document.querySelectorAll('.swipe-panel[data-swipe-close]').forEach(panel => {
+    if (panel._swipeAttached) return;
+    panel._swipeAttached = true;
+
+    let startY = 0, currentY = 0, startTop = 0;
+    let dragging = false, intercepting = false;
+
+    panel.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      startY = e.touches[0].clientY;
+      currentY = startY;
+      startTop = panel.scrollTop;
+      dragging = true;
+      intercepting = false;
+      panel.classList.remove('swipe-snap');
+    }, { passive: true });
+
+    panel.addEventListener('touchmove', (e) => {
+      if (!dragging) return;
+      currentY = e.touches[0].clientY;
+      const delta = currentY - startY;
+      // Only start "pulling the sheet down" if the panel is already at the top of its scroll
+      // and the user is dragging downward.
+      if (delta > 0 && startTop === 0 && panel.scrollTop === 0) {
+        intercepting = true;
+        // Slight rubber-band damping past 200px
+        const eased = delta < 200 ? delta : 200 + (delta - 200) * 0.45;
+        panel.style.transform = `translateY(${eased}px)`;
+      } else if (intercepting) {
+        // User reversed direction — release intercept
+        intercepting = false;
+        panel.style.transform = '';
+      }
+    }, { passive: true });
+
+    const release = () => {
+      if (!dragging) return;
+      dragging = false;
+      const delta = currentY - startY;
+      panel.classList.add('swipe-snap');
+      panel.style.transform = '';
+      if (intercepting && delta > SWIPE_CLOSE_THRESHOLD_PX) {
+        const fnName = panel.getAttribute('data-swipe-close');
+        const fn = fnName ? window[fnName] : null;
+        if (typeof fn === 'function') fn();
+      }
+      intercepting = false;
+      setTimeout(() => panel.classList.remove('swipe-snap'), 320);
+    };
+    panel.addEventListener('touchend', release);
+    panel.addEventListener('touchcancel', release);
+  });
+}
+
+/* ─────────────────────────────────────────────
+   EXPORT / IMPORT  (XML primary; JSON accepted for legacy restore)
+───────────────────────────────────────────── */
+
+/** XML-safe text escape. */
+function xmlEsc(s) {
+  return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'
+  })[c]);
+}
+/** Wrap text content of an element so multiline / odd characters round-trip cleanly. */
+function xmlText(s) { return xmlEsc(s); }
+
+/** Build the backup XML document from the live state. */
+function stateToXML(s) {
+  const lines = [];
+  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  lines.push(`<cakeAlertBackup version="1" exportedAt="${new Date().toISOString()}">`);
+
+  // ── events ──
+  lines.push('  <events>');
+  (s.events || []).forEach(ev => {
+    const attrs = [
+      `id="${xmlEsc(ev.id)}"`,
+      `type="${xmlEsc(ev.type || '')}"`,
+      `name="${xmlEsc(ev.name || '')}"`,
+      `month="${ev.month != null ? ev.month : ''}"`,
+      `day="${ev.day != null ? ev.day : ''}"`,
+      ev.year != null && ev.year !== '' ? `year="${ev.year}"` : ''
+    ].filter(Boolean).join(' ');
+    lines.push(`    <event ${attrs}>`);
+
+    const txt = (tag, val) => {
+      if (val == null || val === '') return;
+      lines.push(`      <${tag}>${xmlText(val)}</${tag}>`);
+    };
+    txt('nickname',        ev.nickname);
+    txt('groomName',       ev.groomName);
+    txt('brideName',       ev.brideName);
+    txt('birthdayPerson',  ev.birthdayPerson);
+    txt('anniversaryType', ev.anniversaryType);
+    txt('memoryDesc',      ev.memoryDesc);
+    txt('specialDesc',     ev.specialDesc);
+    txt('mobile',          ev.mobile);
+    txt('location',        ev.location);
+    txt('notes',           ev.notes);
+    txt('image',           ev.image);
+
+    if (Array.isArray(ev.categories) && ev.categories.length) {
+      lines.push('      <categories>');
+      ev.categories.forEach(c => lines.push(`        <category>${xmlText(c)}</category>`));
+      lines.push('      </categories>');
+    }
+    lines.push('    </event>');
+  });
+  lines.push('  </events>');
+
+  // ── customCategories ──
+  lines.push('  <customCategories>');
+  (s.customCategories || []).forEach(c => lines.push(`    <category>${xmlText(c)}</category>`));
+  lines.push('  </customCategories>');
+
+  // ── customTypes ──
+  lines.push('  <customTypes>');
+  (s.customTypes || []).forEach(t => {
+    lines.push(`    <type key="${xmlEsc(t.key)}" label="${xmlEsc(t.label)}" icon="${xmlEsc(t.icon || '')}"/>`);
+  });
+  lines.push('  </customTypes>');
+
+  // ── typeOverrides ──
+  lines.push('  <typeOverrides>');
+  Object.keys(s.typeOverrides || {}).forEach(k => {
+    const o = s.typeOverrides[k] || {};
+    lines.push(`    <override key="${xmlEsc(k)}" label="${xmlEsc(o.label || '')}" icon="${xmlEsc(o.icon || '')}"/>`);
+  });
+  lines.push('  </typeOverrides>');
+
+  // ── hiddenTypes ──
+  lines.push('  <hiddenTypes>');
+  (s.hiddenTypes || []).forEach(k => lines.push(`    <type>${xmlText(k)}</type>`));
+  lines.push('  </hiddenTypes>');
+
+  // ── categoryRenames ──
+  lines.push('  <categoryRenames>');
+  Object.keys(s.categoryRenames || {}).forEach(k => {
+    lines.push(`    <rename from="${xmlEsc(k)}" to="${xmlEsc(s.categoryRenames[k])}"/>`);
+  });
+  lines.push('  </categoryRenames>');
+
+  // ── hiddenPresets ──
+  lines.push('  <hiddenPresets>');
+  (s.hiddenPresets || []).forEach(p => lines.push(`    <preset>${xmlText(p)}</preset>`));
+  lines.push('  </hiddenPresets>');
+
+  // ── categoryIcons ──
+  lines.push('  <categoryIcons>');
+  Object.keys(s.categoryIcons || {}).forEach(name => {
+    lines.push(`    <icon name="${xmlEsc(name)}" value="${xmlEsc(s.categoryIcons[name])}"/>`);
+  });
+  lines.push('  </categoryIcons>');
+
+  // ── notifSettings ──
+  const ns = s.notifSettings || {};
+  lines.push(`  <notifSettings dailyReminderTime="${xmlEsc(ns.dailyReminderTime || '08:00')}" enabled="${ns.enabled !== false}" lastDailyDate="${xmlEsc(ns.lastDailyDate || '')}" lastMonthlyMonth="${xmlEsc(ns.lastMonthlyMonth || '')}"/>`);
+
+  lines.push('</cakeAlertBackup>');
+  return lines.join('\n');
+}
+
+/** Parse a backup XML document back into a partial state. Returns null on failure. */
+function xmlToState(xmlString) {
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(xmlString, 'application/xml');
+  } catch (_) { return null; }
+  if (!doc || doc.getElementsByTagName('parsererror').length) return null;
+  const root = doc.documentElement;
+  if (!root || root.nodeName !== 'cakeAlertBackup') return null;
+
+  const txt = (parent, tag) => {
+    const el = parent.getElementsByTagName(tag)[0];
+    return el ? el.textContent : '';
+  };
+  const intOrNull = v => {
+    if (v == null || v === '') return null;
+    const n = parseInt(v, 10);
+    return isNaN(n) ? null : n;
+  };
+
+  const out = {
+    events: [],
+    customCategories: [],
+    customTypes: [],
+    typeOverrides: {},
+    hiddenTypes: [],
+    categoryRenames: {},
+    hiddenPresets: [],
+    categoryIcons: {},
+    notifSettings: null,
+  };
+
+  // events
+  const eventsEl = root.getElementsByTagName('events')[0];
+  if (eventsEl) {
+    Array.from(eventsEl.children).forEach(ev => {
+      if (ev.tagName !== 'event') return;
+      const cats = [];
+      const catsEl = ev.getElementsByTagName('categories')[0];
+      if (catsEl) Array.from(catsEl.children).forEach(c => { if (c.textContent) cats.push(c.textContent); });
+      out.events.push({
+        id:              ev.getAttribute('id') || ('ev_' + Math.random().toString(36).slice(2)),
+        type:            ev.getAttribute('type') || 'birthday',
+        name:            ev.getAttribute('name') || '',
+        month:           intOrNull(ev.getAttribute('month')),
+        day:             intOrNull(ev.getAttribute('day')),
+        year:            intOrNull(ev.getAttribute('year')),
+        nickname:        txt(ev, 'nickname'),
+        groomName:       txt(ev, 'groomName'),
+        brideName:       txt(ev, 'brideName'),
+        birthdayPerson:  txt(ev, 'birthdayPerson'),
+        anniversaryType: txt(ev, 'anniversaryType'),
+        memoryDesc:      txt(ev, 'memoryDesc'),
+        specialDesc:     txt(ev, 'specialDesc'),
+        mobile:          txt(ev, 'mobile'),
+        location:        txt(ev, 'location'),
+        notes:           txt(ev, 'notes'),
+        image:           txt(ev, 'image'),
+        categories:      cats,
+      });
+    });
+  }
+
+  // customCategories
+  const ccEl = root.getElementsByTagName('customCategories')[0];
+  if (ccEl) Array.from(ccEl.children).forEach(c => { if (c.textContent) out.customCategories.push(c.textContent); });
+
+  // customTypes
+  const ctEl = root.getElementsByTagName('customTypes')[0];
+  if (ctEl) Array.from(ctEl.children).forEach(t => {
+    const key = t.getAttribute('key'); const label = t.getAttribute('label');
+    if (key && label) out.customTypes.push({ key, label, icon: t.getAttribute('icon') || 'tag' });
+  });
+
+  // typeOverrides
+  const toEl = root.getElementsByTagName('typeOverrides')[0];
+  if (toEl) Array.from(toEl.children).forEach(o => {
+    const k = o.getAttribute('key');
+    if (k) out.typeOverrides[k] = { label: o.getAttribute('label') || '', icon: o.getAttribute('icon') || '' };
+  });
+
+  // hiddenTypes
+  const htEl = root.getElementsByTagName('hiddenTypes')[0];
+  if (htEl) Array.from(htEl.children).forEach(t => { if (t.textContent) out.hiddenTypes.push(t.textContent); });
+
+  // categoryRenames
+  const crEl = root.getElementsByTagName('categoryRenames')[0];
+  if (crEl) Array.from(crEl.children).forEach(r => {
+    const f = r.getAttribute('from'); const to = r.getAttribute('to');
+    if (f && to) out.categoryRenames[f] = to;
+  });
+
+  // hiddenPresets
+  const hpEl = root.getElementsByTagName('hiddenPresets')[0];
+  if (hpEl) Array.from(hpEl.children).forEach(p => { if (p.textContent) out.hiddenPresets.push(p.textContent); });
+
+  // categoryIcons
+  const ciEl = root.getElementsByTagName('categoryIcons')[0];
+  if (ciEl) Array.from(ciEl.children).forEach(i => {
+    const n = i.getAttribute('name'); const v = i.getAttribute('value');
+    if (n && v) out.categoryIcons[n] = v;
+  });
+
+  // notifSettings
+  const nsEl = root.getElementsByTagName('notifSettings')[0];
+  if (nsEl) {
+    out.notifSettings = {
+      dailyReminderTime: nsEl.getAttribute('dailyReminderTime') || '08:00',
+      enabled:           nsEl.getAttribute('enabled') !== 'false',
+      lastDailyDate:     nsEl.getAttribute('lastDailyDate') || '',
+      lastMonthlyMonth:  nsEl.getAttribute('lastMonthlyMonth') || '',
+    };
+  }
+
+  return out;
+}
+
+/** Parse arbitrary backup text (XML or legacy JSON) into a partial state, or null. */
+function parseBackupText(text) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  if (t.charAt(0) === '<') {
+    return xmlToState(t);
+  }
+  try {
+    const parsed = JSON.parse(t);
+    return Array.isArray(parsed) ? { events: parsed } : parsed;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Merge a parsed backup into the live state. Skips duplicate event ids. */
+function applyBackupToState(incoming) {
+  if (!incoming || !Array.isArray(incoming.events)) return false;
+
+  const existingIds = new Set(state.events.map(x => x.id));
+  incoming.events.forEach(ev => { if (ev && ev.id && !existingIds.has(ev.id)) state.events.push(ev); });
+
+  (incoming.customCategories || []).forEach(c => {
+    if (!allCategories().includes(c)) state.customCategories.push(c);
+  });
+  (incoming.customTypes || []).forEach(t => {
+    if (!t || !t.key) return;
+    if (!state.customTypes.some(x => x.key === t.key)) state.customTypes.push(t);
+  });
+
+  Object.assign(state.typeOverrides   = state.typeOverrides   || {}, incoming.typeOverrides   || {});
+  Object.assign(state.categoryRenames = state.categoryRenames || {}, incoming.categoryRenames || {});
+  Object.assign(state.categoryIcons   = state.categoryIcons   || {}, incoming.categoryIcons   || {});
+  (incoming.hiddenTypes   || []).forEach(k => { if (!state.hiddenTypes.includes(k))   state.hiddenTypes.push(k); });
+  (incoming.hiddenPresets || []).forEach(k => { if (!state.hiddenPresets.includes(k)) state.hiddenPresets.push(k); });
+  if (incoming.notifSettings) {
+    state.notifSettings = Object.assign({}, state.notifSettings || {}, incoming.notifSettings);
+  }
+
+  saveState();
+  render();
+  syncAndroidNotifications();
+  return true;
+}
+
+/** True iff the Android bridge is loaded. */
+function hasAndroidBackupBridge() {
+  return typeof window.AndroidBackup !== 'undefined' && window.AndroidBackup !== null;
+}
+
+/* ─── Backup ─── */
+function exportData() {
+  const xml = stateToXML(state);
+  const filename = 'cakealert-' + new Date().toISOString().slice(0, 10) + '.xml';
+
+  if (hasAndroidBackupBridge()) {
+    let res = null;
+    try { res = JSON.parse(window.AndroidBackup.saveBackup(filename, xml) || '{}'); }
+    catch (_) { res = null; }
+
+    if (res && res.success) {
+      const where = res.displayPath || filename;
+      // Persistent confirmation: lightweight banner-style alert beats a transient toast here.
+      // We use a confirm-style dialog so the user can see the location and tap OK.
+      try { alert('Backup saved\n\nLocation: ' + where + '\n\nFile name: ' + filename); }
+      catch (_) { toast('Backup saved to ' + where); }
+    } else {
+      toast((res && res.error) ? ('Backup failed: ' + res.error) : 'Backup failed');
+    }
+    return;
+  }
+
+  // Browser fallback (desktop / non-Android WebView)
+  const blob = new Blob([xml], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('Backup downloaded as XML');
+}
+
+/* ─── Restore picker (Android bridge) ─── */
+function openRestorePicker() {
+  // On non-Android, fall straight back to the system file picker.
+  if (!hasAndroidBackupBridge()) {
+    document.getElementById('importFile').click();
+    return;
+  }
+  renderRestorePickerList();
+  showModal('restorePicker');
+}
+function closeRestorePicker() { hideModal('restorePicker'); }
+
+/** Items currently shown in the Restore picker. Indexed lookup avoids
+   any quoting issues from inlining file paths into onclick attributes. */
+let _restorePickerItems = [];
+
+function renderRestorePickerList() {
+  const listEl = document.getElementById('restorePickerList');
+  const locEl  = document.getElementById('restorePickerLocation');
+  if (!listEl) return;
+
+  let items = [];
+  try { items = JSON.parse(window.AndroidBackup.listBackups() || '[]'); } catch (_) { items = []; }
+  _restorePickerItems = items;
+
+  if (locEl) {
+    locEl.innerHTML = items.length
+      ? `Saved backups are kept in <span class="font-semibold text-cocoa-800">app storage</span> and a copy is also written to <span class="font-semibold text-cocoa-800">Downloads/CakeAlert/</span>.`
+      : `No saved backups yet. New backups will be written to <span class="font-semibold text-cocoa-800">Downloads/CakeAlert/</span> and kept in app storage for one-tap restore.`;
+  }
+
+  if (!items.length) {
+    listEl.innerHTML = `
+      <div class="text-center py-8 text-cocoa-700/60 text-sm">
+        <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 text-rose-300"></i>
+        <div>No backups found.</div>
+        <div class="text-xs mt-1">Use <span class="font-semibold">Backup</span> to create one, or pick a file from your device below.</div>
+      </div>`;
+    setTimeout(() => lucide.createIcons(), 10);
+    return;
+  }
+
+  listEl.innerHTML = items.map((it, idx) => {
+    const sizeKb = Math.max(1, Math.round((it.size || 0) / 1024));
+    const when = (() => {
+      try { return new Date(it.mtime || 0).toLocaleString(); }
+      catch (_) { return ''; }
+    })();
+    return `
+      <div class="bg-white rounded-2xl p-3 border border-rose-100 shadow-soft flex items-center gap-3">
+        <button onclick="restoreFromBackupIndex(${idx})" class="flex-1 text-left flex items-center gap-3 hover:bg-rose-50 rounded-xl px-2 py-1 -mx-2 -my-1 transition">
+          <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0">
+            <i data-lucide="file-text" class="w-5 h-5"></i>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-semibold text-cocoa-800 truncate">${escapeHtml(it.name)}</div>
+            <div class="text-[11px] text-cocoa-700/70">${escapeHtml(when)} • ${sizeKb} KB</div>
+          </div>
+        </button>
+        <button onclick="deleteBackupIndex(${idx})" class="w-9 h-9 rounded-full bg-white border border-rose-100 hover:bg-rose-50 flex items-center justify-center text-rose-500" title="Delete">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+      </div>`;
+  }).join('');
+  setTimeout(() => lucide.createIcons(), 10);
+}
+
+function restoreFromBackupIndex(idx) {
+  const it = _restorePickerItems[idx];
+  if (!it || !hasAndroidBackupBridge()) return;
+
+  let text = '';
+  try { text = window.AndroidBackup.readBackup(it.path) || ''; } catch (_) { text = ''; }
+  if (!text) { toast("Couldn't read that backup"); return; }
+
+  const incoming = parseBackupText(text);
+  if (!incoming || !Array.isArray(incoming.events)) { toast('Invalid backup file'); return; }
+
+  if (!confirm(`Import ${incoming.events.length} events from "${it.name}"?`)) return;
+  if (applyBackupToState(incoming)) {
+    closeRestorePicker();
+    toast('Import complete');
+  } else {
+    toast('Import failed');
+  }
+}
+
+function deleteBackupIndex(idx) {
+  const it = _restorePickerItems[idx];
+  if (!it || !hasAndroidBackupBridge()) return;
+  if (!confirm(`Delete backup "${it.name}"? This cannot be undone.`)) return;
+  let ok = false;
+  try { ok = !!window.AndroidBackup.deleteBackup(it.path); } catch (_) { ok = false; }
+  toast(ok ? 'Backup deleted' : 'Could not delete');
+  renderRestorePickerList();
+}
+
+/* ─── Legacy file-picker import (used by "Pick from device…" inside the picker
+   and as the only path on non-Android browsers). ─── */
+function handleImport(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const incoming = parseBackupText(r.result);
+    if (!incoming || !Array.isArray(incoming.events)) { toast('Invalid backup file'); e.target.value = ''; return; }
+    if (!confirm(`Import ${incoming.events.length} events?`)) { e.target.value = ''; return; }
+    if (applyBackupToState(incoming)) {
+      closeRestorePicker();
+      toast('Import complete');
+    } else {
+      toast('Import failed');
+    }
+  };
+  r.readAsText(file);
+  e.target.value = '';
+}
+
+/* ─────────────────────────────────────────────
+   UTILS
+───────────────────────────────────────────── */
+function escapeHtml(s) {
+  return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+function escAttr(s) {
+  return escapeHtml(s).replace(/'/g, '&#39;');
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('opacity-0'); t.classList.add('opacity-100');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    t.classList.add('opacity-0'); t.classList.remove('opacity-100');
+  }, 2200);
+}
+
+/* ─────────────────────────────────────────────
+   ANDROID BACK BUTTON
+   ─────────────────────────────────────────────
+   Kotlin's OnBackPressedCallback calls
+       window.cakeAlertBack()
+   via evaluateJavascript and awaits the boolean result.
+     - true  → JS handled the back press; activity stays open.
+     - false → nothing to close; Kotlin proceeds to finish() the activity.
+───────────────────────────────────────────── */
+window.cakeAlertBack = function cakeAlertBack() {
+  // 1. Auth screen — only consume back if user is already signed in (so they
+  //    can dismiss the screen). If not signed in, let it fall through.
+  const authEl = document.getElementById('auth-screen');
+  if (authEl && !authEl.classList.contains('hidden')) {
+    if (firebaseAuth && firebaseAuth.currentUser) { continueOffline(); return true; }
+    return false;
+  }
+
+  // 2. Topmost overlays first (cropper > source sheet > restore > managers > others)
+  const order = [
+    'cropperModal',
+    'imgSourceSheet',
+    'restorePicker',
+    'typeManagerModal',
+    'categoryManagerModal',
+    'notifModal',
+    'settingsModal',
+    'detailModal',
+    'eventModal',
+  ];
+  for (const id of order) {
+    const el = document.getElementById(id);
+    if (!el || el.classList.contains('hidden')) continue;
+    if (id === 'cropperModal')         { cancelCrop(); return true; }
+    if (id === 'imgSourceSheet')       { closeImageSourceSheet(); return true; }
+    if (id === 'restorePicker')        { closeRestorePicker(); return true; }
+    if (id === 'notifModal')           { closeNotifCenter(); return true; }
+    if (id === 'eventModal')           { closeModal(); return true; }
+    if (id === 'detailModal')          { closeDetail(); return true; }
+    if (id === 'settingsModal')        { closeSettings(); return true; }
+    if (id === 'typeManagerModal')     { closeTypeManager(); return true; }
+    if (id === 'categoryManagerModal') { closeCategoryManager(); return true; }
+  }
+
+  // 3. Calendar tab → Home tab
+  if (currentTab === 'calendar') { switchTab('home'); return true; }
+
+  // 4. Nothing to close — Kotlin will finish() the activity.
+  return false;
+};
+
+// Legacy alias (kept in case anything else references it)
+window.handleBackPressed = window.cakeAlertBack;
+
+/* ─────────────────────────────────────────────
+   BOOT
+───────────────────────────────────────────── */
+function populateYearSelect() {
+  const sel = document.getElementById('evYear');
+  if (!sel) return;
+  const cur = new Date().getFullYear();
+  let html = '<option value="">YYYY</option>';
+  for (let y = cur + 5; y >= 1900; y--) {
+    html += `<option value="${y}">${y}</option>`;
+  }
+  sel.innerHTML = html;
+}
+
+function boot() {
+  loadTheme();
+  loadState();
+  populateYearSelect();
+  switchTab('home');
+  render();
+  lucide.createIcons();
+  applyTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+
+  // Close modals on overlay click
+  ['eventModal','detailModal','settingsModal','notifModal','typeManagerModal','categoryManagerModal','imgSourceSheet','restorePicker'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('click', (e) => {
+      if (e.target !== el) return;
+      if (id === 'notifModal')           closeNotifCenter();
+      else if (id === 'imgSourceSheet')  closeImageSourceSheet();
+      else if (id === 'restorePicker')   closeRestorePicker();
+      else hideModal(id);
+    });
+  });
+
+  // Swipe-down-to-close gesture on every modal panel
+  attachSwipeClosePanels();
+
+  // Init Firebase auth
+  setupAuth();
+
+  // Start notification ticker
+  startNotifTicker();
+  syncNotifSettingsToUI();
+
+  // Native Android: ask for permission once and arm scheduled alarms
+  ensureAndroidNotifPermission();
+  syncAndroidNotifications();
+
+  // Re-tick when tab/app regains focus
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) notifTick();
+  });
+
+  // Hide splash + decide between auth screen / app
+  hideSplash();
+}
+
+function hideSplash() {
+  const minDelay = new Promise(res => setTimeout(res, 1800));
+  Promise.all([minDelay, authReady]).then(() => {
+    const el = document.getElementById('app-loading');
+    if (el) {
+      el.classList.add('hide');
+      setTimeout(() => { el.remove(); }, 500);
+    }
+    // If Firebase configured and user not signed in, show auth screen
+    if (window.__FB_READY__ && firebaseAuth && !firebaseAuth.currentUser) {
+      showAuthScreen();
+    }
+  });
+}
+
+boot();
+</script>
+
+</body>
+</html>
