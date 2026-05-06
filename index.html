@@ -15,6 +15,7 @@
 <!-- ─────────── FIREBASE SDK ─────────── -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
   // ▼▼▼ PASTE YOUR firebaseConfig HERE ▼▼▼
   const firebaseConfig = {
@@ -28,11 +29,21 @@
   // ▲▲▲ END firebaseConfig ▲▲▲
 
   window.__FB_READY__ = false;
+  window.__FB_FIRESTORE_READY__ = false;
   if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
     try {
       firebase.initializeApp(firebaseConfig);
       firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
       window.__FB_READY__ = true;
+
+      // Enable Firestore offline persistence (best-effort — fails in private mode / multi-tab).
+      if (firebase.firestore) {
+        try {
+          firebase.firestore().enablePersistence({ synchronizeTabs: true })
+            .catch(() => {/* offline cache simply disabled — sync still works */});
+          window.__FB_FIRESTORE_READY__ = true;
+        } catch (e) { console.warn('Firestore persistence not enabled:', e); }
+      }
     } catch (e) { console.error('Firebase init failed', e); }
   }
 </script>
@@ -242,6 +253,10 @@
       </div>
       <h2 class="font-display font-bold text-xl text-cocoa-800">Welcome to Cake Alert</h2>
       <p class="text-xs text-cocoa-700/70 mt-1" id="authSub">Sign in to keep your sweet moments safe</p>
+      <div class="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-100 text-[11px] text-rose-700 font-semibold">
+        <i data-lucide="cloud-check" class="w-3.5 h-3.5"></i>
+        Real-time sync across all your devices
+      </div>
     </div>
 
     <!-- Tabs -->
@@ -641,6 +656,27 @@
           <button onclick="signOut()" class="px-3 py-2 rounded-xl bg-rose-100 text-rose-700 text-xs font-semibold hover:bg-rose-200 transition flex items-center gap-1">
             <i data-lucide="log-out" class="w-3.5 h-3.5"></i> Sign Out
           </button>
+        </div>
+
+        <!-- Cloud Sync status (visible only when signed in) -->
+        <div class="mt-3 bg-white rounded-2xl p-4 border border-rose-100 shadow-soft">
+          <div class="flex items-center gap-3">
+            <div id="cloudSyncIcon" class="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="cloud" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold text-cocoa-800">Cloud Sync</div>
+              <div id="cloudSyncStatusText" class="text-xs text-cocoa-700/70">Active — your events stay in sync across all your devices.</div>
+            </div>
+            <button id="cloudSyncBtn" onclick="manualSyncNow()"
+                    class="px-3 py-2 rounded-xl bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition flex items-center gap-1">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Sync now
+            </button>
+          </div>
+          <div id="cloudSyncError" class="hidden mt-2 flex items-start gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
+            <i data-lucide="triangle-alert" class="w-3.5 h-3.5 flex-shrink-0 mt-0.5"></i>
+            <span id="cloudSyncErrorText"></span>
+          </div>
         </div>
       </section>
 
@@ -1252,7 +1288,7 @@ function loadTheme() {
 /* ──────────────────────────────────
    SETTINGS MODAL
 ────────────────────────────────── */
-function openSettings() { updateStorageWarn(); updateAuthUI(firebaseAuth ? firebaseAuth.currentUser : null); syncNotifSettingsToUI(); showModal('settingsModal'); }
+function openSettings() { updateStorageWarn(); updateAuthUI(firebaseAuth ? firebaseAuth.currentUser : null); updateCloudSyncUI(); syncNotifSettingsToUI(); showModal('settingsModal'); }
 function closeSettings() { hideModal('settingsModal'); }
 
 /* ──────────────────────────────────
@@ -1274,6 +1310,8 @@ function setupAuth() {
   firebaseAuth.onAuthStateChanged((user) => {
     if (!authResolved) { authResolved = true; if (authResolveCallback) authResolveCallback(); }
     updateAuthUI(user);
+    // Cloud sync follows the auth state.
+    if (user) startCloudSync(user); else stopCloudSync();
   });
   return true;
 }
@@ -1388,6 +1426,413 @@ function continueOffline() {
   screen.classList.remove('flex');
 }
 function openAuthFromSettings() { closeSettings(); showAuthScreen(); }
+
+/* ─────────────────────────────────────────────
+   CLOUD SYNC (Firestore real-time)
+   ─────────────────────────────────────────────
+   Schema:
+     users/{uid}/events/{eventId}    one document per event
+     users/{uid}/meta/state          settings (custom categories/types, etc.)
+
+   Behaviour:
+     - On sign-in: union-reconcile local + cloud (so neither side loses
+       data on first connect), push the union to cloud, then attach
+       real-time listeners. After this, cloud is source of truth.
+     - Local changes (saveState) are diffed and pushed (debounced 500 ms).
+     - Remote changes are applied with `applyingRemote` set so the
+       saveState wrapper doesn't bounce them straight back.
+     - Sign-out detaches listeners; local data stays as-is.
+───────────────────────────────────────────── */
+const cloud = {
+  enabled: false,           // true while signed-in user has an active sync session
+  applyingRemote: false,    // suppress push while applying a snapshot from cloud
+  initialDone: false,       // false until first reconcile completes
+  status: 'idle',           // 'idle' | 'syncing' | 'error' | 'offline'
+  lastSyncedAt: 0,
+  lastError: '',
+  debounceTimer: null,
+  unsubEvents: null,
+  unsubMeta: null,
+  fs: null,
+  user: null,
+  // Hash maps used to compute diffs against the last known cloud snapshot
+  // (keyed by event id → JSON string). Avoid blind full re-writes.
+  lastEventHashes: {},
+  lastMetaHash: '',
+};
+
+function cloudReady() {
+  return !!(window.__FB_FIRESTORE_READY__ && firebase && firebase.firestore);
+}
+
+/** Stable JSON-string fingerprint of an event for diffing. */
+function _hashEvent(ev) { return JSON.stringify(ev); }
+
+/** Build the meta-document payload from local state. */
+function _buildMeta() {
+  return {
+    customCategories: state.customCategories || [],
+    customTypes:      state.customTypes || [],
+    typeOverrides:    state.typeOverrides || {},
+    hiddenTypes:      state.hiddenTypes || [],
+    categoryRenames:  state.categoryRenames || {},
+    hiddenPresets:    state.hiddenPresets || [],
+    categoryIcons:    state.categoryIcons || {},
+    notifSettings:    state.notifSettings || {},
+  };
+}
+
+function _setCloudStatus(status, errorMsg) {
+  cloud.status = status;
+  cloud.lastError = errorMsg || '';
+  if (status === 'idle') cloud.lastSyncedAt = Date.now();
+  updateCloudSyncUI();
+}
+
+/** Called by onAuthStateChanged when a user signs in. */
+async function startCloudSync(user) {
+  if (!cloudReady() || !user) return;
+  if (cloud.enabled && cloud.user && cloud.user.uid === user.uid) return; // already running
+
+  stopCloudSync(); // clean any prior session
+
+  cloud.fs = firebase.firestore();
+  cloud.user = user;
+  cloud.enabled = true;
+  cloud.initialDone = false;
+  cloud.lastEventHashes = {};
+  cloud.lastMetaHash = '';
+  _setCloudStatus('syncing');
+
+  try {
+    await _doInitialReconcile();
+    _attachLiveListeners();
+    cloud.initialDone = true;
+    _setCloudStatus('idle');
+  } catch (e) {
+    console.error('Cloud sync init failed:', e);
+    _setCloudStatus('error', (e && e.message) || 'Sync failed');
+  }
+}
+
+/** Called on sign-out — detaches listeners. Local data is left untouched. */
+function stopCloudSync() {
+  if (cloud.unsubEvents) { try { cloud.unsubEvents(); } catch (_) {} cloud.unsubEvents = null; }
+  if (cloud.unsubMeta)   { try { cloud.unsubMeta();   } catch (_) {} cloud.unsubMeta   = null; }
+  if (cloud.debounceTimer) { clearTimeout(cloud.debounceTimer); cloud.debounceTimer = null; }
+  cloud.enabled = false;
+  cloud.user = null;
+  cloud.fs = null;
+  cloud.initialDone = false;
+  cloud.lastEventHashes = {};
+  cloud.lastMetaHash = '';
+  _setCloudStatus('idle');
+}
+
+/**
+ * One-shot fetch + union merge (cloud wins on collision), then push the union
+ * back. After this returns, both sides hold the same content.
+ */
+async function _doInitialReconcile() {
+  const userRef  = cloud.fs.collection('users').doc(cloud.user.uid);
+  const evRef    = userRef.collection('events');
+  const metaRef  = userRef.collection('meta').doc('state');
+
+  const [evSnap, metaSnap] = await Promise.all([evRef.get(), metaRef.get()]);
+
+  // ── Events: union by id; cloud version wins on collision ──
+  const merged = new Map();
+  (state.events || []).forEach(e => { if (e && e.id) merged.set(e.id, e); });
+  evSnap.docs.forEach(d => {
+    const data = d.data();
+    if (data && data.id) merged.set(data.id, data);
+  });
+
+  // ── Meta: prefer cloud values where present, otherwise keep local ──
+  let mergedMeta = _buildMeta();
+  if (metaSnap.exists) {
+    const c = metaSnap.data() || {};
+    mergedMeta = {
+      customCategories: Array.from(new Set([...(mergedMeta.customCategories || []), ...(c.customCategories || [])])),
+      customTypes:      _unionByKey(mergedMeta.customTypes || [], c.customTypes || [], 'key'),
+      typeOverrides:    Object.assign({}, mergedMeta.typeOverrides || {}, c.typeOverrides || {}),
+      hiddenTypes:      Array.from(new Set([...(mergedMeta.hiddenTypes || []), ...(c.hiddenTypes || [])])),
+      categoryRenames:  Object.assign({}, mergedMeta.categoryRenames || {}, c.categoryRenames || {}),
+      hiddenPresets:    Array.from(new Set([...(mergedMeta.hiddenPresets || []), ...(c.hiddenPresets || [])])),
+      categoryIcons:    Object.assign({}, mergedMeta.categoryIcons || {}, c.categoryIcons || {}),
+      notifSettings:    Object.assign({}, mergedMeta.notifSettings || {}, c.notifSettings || {}),
+    };
+  }
+
+  // ── Apply merged result to local state without bouncing back to cloud ──
+  cloud.applyingRemote = true;
+  try {
+    state.events           = Array.from(merged.values());
+    state.customCategories = mergedMeta.customCategories;
+    state.customTypes      = mergedMeta.customTypes;
+    state.typeOverrides    = mergedMeta.typeOverrides;
+    state.hiddenTypes      = mergedMeta.hiddenTypes;
+    state.categoryRenames  = mergedMeta.categoryRenames;
+    state.hiddenPresets    = mergedMeta.hiddenPresets;
+    state.categoryIcons    = mergedMeta.categoryIcons;
+    state.notifSettings    = mergedMeta.notifSettings;
+    saveState();
+    if (typeof render === 'function') render();
+    if (typeof syncAndroidNotifications === 'function') syncAndroidNotifications();
+  } finally {
+    cloud.applyingRemote = false;
+  }
+
+  // ── Push the merged result back so both sides match ──
+  // Seed lastEventHashes with the actual cloud-confirmed hashes so the
+  // upcoming diff push only writes events that genuinely differ
+  // (i.e. local-only events the cloud doesn't have yet).
+  cloud.lastEventHashes = {};
+  evSnap.docs.forEach(d => {
+    const data = d.data();
+    if (data && data.id) cloud.lastEventHashes[data.id] = _hashEvent(data);
+  });
+  // Seed lastMetaHash from cloud projected through the same shape _buildMeta
+  // emits, so the diff-push only writes meta when the merged local shape
+  // genuinely differs from what's already in the cloud.
+  if (metaSnap.exists) {
+    const c = metaSnap.data() || {};
+    cloud.lastMetaHash = JSON.stringify({
+      customCategories: c.customCategories || [],
+      customTypes:      c.customTypes      || [],
+      typeOverrides:    c.typeOverrides    || {},
+      hiddenTypes:      c.hiddenTypes      || [],
+      categoryRenames:  c.categoryRenames  || {},
+      hiddenPresets:    c.hiddenPresets    || [],
+      categoryIcons:    c.categoryIcons    || {},
+      notifSettings:    c.notifSettings    || {},
+    });
+  } else {
+    cloud.lastMetaHash = '';
+  }
+  await _pushDiffToCloud();
+}
+
+/** Helper: union two arrays of objects by a key field, second wins on collision. */
+function _unionByKey(a, b, key) {
+  const m = new Map();
+  (a || []).forEach(x => { if (x && x[key]) m.set(x[key], x); });
+  (b || []).forEach(x => { if (x && x[key]) m.set(x[key], x); });
+  return Array.from(m.values());
+}
+
+/** Subscribe to live updates of events & meta. */
+function _attachLiveListeners() {
+  const userRef = cloud.fs.collection('users').doc(cloud.user.uid);
+  const evRef   = userRef.collection('events');
+  const metaRef = userRef.collection('meta').doc('state');
+
+  cloud.unsubEvents = evRef.onSnapshot(snap => {
+    // Skip echoes of our own writes (Firestore fires the listener locally
+    // before the server confirms; hasPendingWrites is true during that round-trip).
+    if (snap.metadata.hasPendingWrites) return;
+
+    cloud.applyingRemote = true;
+    try {
+      snap.docChanges().forEach(change => {
+        const data = change.doc.data();
+        if (!data || !data.id) return;
+        const idx = state.events.findIndex(e => e.id === data.id);
+        if (change.type === 'removed') {
+          if (idx !== -1) state.events.splice(idx, 1);
+          delete cloud.lastEventHashes[data.id];
+        } else {
+          if (idx === -1) state.events.push(data); else state.events[idx] = data;
+          cloud.lastEventHashes[data.id] = _hashEvent(data);
+        }
+      });
+      saveState();
+      if (typeof render === 'function') render();
+      if (typeof syncAndroidNotifications === 'function') syncAndroidNotifications();
+    } finally {
+      cloud.applyingRemote = false;
+    }
+    _setCloudStatus('idle');
+  }, err => {
+    console.warn('events listener error:', err);
+    _setCloudStatus('error', err.message || 'Listener error');
+  });
+
+  cloud.unsubMeta = metaRef.onSnapshot(doc => {
+    if (doc.metadata.hasPendingWrites) return;
+    if (!doc.exists) return;
+    const data = doc.data() || {};
+
+    cloud.applyingRemote = true;
+    try {
+      if ('customCategories' in data) state.customCategories = data.customCategories || [];
+      if ('customTypes'      in data) state.customTypes      = data.customTypes      || [];
+      if ('typeOverrides'    in data) state.typeOverrides    = data.typeOverrides    || {};
+      if ('hiddenTypes'      in data) state.hiddenTypes      = data.hiddenTypes      || [];
+      if ('categoryRenames'  in data) state.categoryRenames  = data.categoryRenames  || {};
+      if ('hiddenPresets'    in data) state.hiddenPresets    = data.hiddenPresets    || [];
+      if ('categoryIcons'    in data) state.categoryIcons    = data.categoryIcons    || {};
+      if ('notifSettings'    in data) state.notifSettings    = Object.assign({}, state.notifSettings || {}, data.notifSettings);
+      cloud.lastMetaHash = JSON.stringify(_buildMeta());
+      saveState();
+      if (typeof render === 'function') render();
+    } finally {
+      cloud.applyingRemote = false;
+    }
+    _setCloudStatus('idle');
+  }, err => {
+    console.warn('meta listener error:', err);
+    _setCloudStatus('error', err.message || 'Listener error');
+  });
+}
+
+/** Diff current state against last-known cloud state and push only changes. */
+async function _pushDiffToCloud() {
+  if (!cloud.enabled || cloud.applyingRemote || !cloud.fs || !cloud.user) return;
+
+  _setCloudStatus('syncing');
+
+  const userRef = cloud.fs.collection('users').doc(cloud.user.uid);
+  const evRef   = userRef.collection('events');
+  const metaRef = userRef.collection('meta').doc('state');
+
+  const newHashes = {};
+  const ops = [];
+
+  // Events: write only changed; delete missing.
+  (state.events || []).forEach(ev => {
+    if (!ev || !ev.id) return;
+    const h = _hashEvent(ev);
+    newHashes[ev.id] = h;
+    if (cloud.lastEventHashes[ev.id] !== h) {
+      ops.push(evRef.doc(ev.id).set(ev));
+    }
+  });
+  Object.keys(cloud.lastEventHashes).forEach(id => {
+    if (!(id in newHashes)) ops.push(evRef.doc(id).delete());
+  });
+
+  // Meta: rewrite only when the JSON shape actually changed.
+  const meta = _buildMeta();
+  const metaJson = JSON.stringify(meta);
+  if (metaJson !== cloud.lastMetaHash) {
+    ops.push(metaRef.set(Object.assign({}, meta, {
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    })));
+  }
+
+  cloud.lastEventHashes = newHashes;
+  cloud.lastMetaHash    = metaJson;
+
+  if (!ops.length) { _setCloudStatus('idle'); return; }
+
+  try {
+    await Promise.all(ops);
+    _setCloudStatus('idle');
+  } catch (e) {
+    console.warn('cloud push failed:', e);
+    _setCloudStatus('error', (e && e.message) || 'Push failed');
+  }
+}
+
+/** Manual "Sync now" handler — exposed via the Settings UI. */
+function manualSyncNow() {
+  if (!cloud.enabled) {
+    if (firebaseAuth && firebaseAuth.currentUser) startCloudSync(firebaseAuth.currentUser);
+    return;
+  }
+  // Re-run a full diff push.
+  _pushDiffToCloud();
+}
+
+/** Friendly "1m ago" / "just now" formatter. */
+function _relativeTime(ts) {
+  if (!ts) return '';
+  const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (diffSec < 5)   return 'just now';
+  if (diffSec < 60)  return diffSec + 's ago';
+  const m = Math.floor(diffSec / 60);
+  if (m < 60)        return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24)        return h + 'h ago';
+  return new Date(ts).toLocaleDateString();
+}
+
+/** Render the cloud-sync status row in Settings. Safe to call any time. */
+function updateCloudSyncUI() {
+  const txt = document.getElementById('cloudSyncStatusText');
+  const iconWrap = document.getElementById('cloudSyncIcon');
+  const errWrap = document.getElementById('cloudSyncError');
+  const errTxt  = document.getElementById('cloudSyncErrorText');
+  const btn = document.getElementById('cloudSyncBtn');
+  if (!txt || !iconWrap) return;
+
+  if (!cloud.enabled) {
+    txt.textContent = cloudReady() ? 'Inactive — sign in to enable.' : 'Unavailable on this build.';
+    iconWrap.classList.remove('bg-emerald-100','text-emerald-600','bg-amber-100','text-amber-600');
+    iconWrap.classList.add('bg-rose-100','text-rose-600');
+    iconWrap.firstElementChild && iconWrap.firstElementChild.setAttribute('data-lucide', 'cloud-off');
+    if (errWrap) errWrap.classList.add('hidden');
+    if (btn) btn.disabled = !cloudReady();
+    lucide.createIcons();
+    return;
+  }
+
+  // Reset color slots
+  iconWrap.classList.remove('bg-rose-100','text-rose-600','bg-amber-100','text-amber-600','bg-emerald-100','text-emerald-600');
+  let icon = 'cloud';
+  let message = '';
+  switch (cloud.status) {
+    case 'syncing':
+      icon = 'refresh-cw';
+      message = 'Syncing…';
+      iconWrap.classList.add('bg-amber-100','text-amber-600');
+      break;
+    case 'error':
+      icon = 'cloud-alert';
+      message = 'Sync error — tap "Sync now" to retry.';
+      iconWrap.classList.add('bg-amber-100','text-amber-600');
+      break;
+    case 'idle':
+    default:
+      icon = 'cloud-check';
+      message = cloud.lastSyncedAt
+        ? 'Active — last synced ' + _relativeTime(cloud.lastSyncedAt) + '.'
+        : 'Active — your events stay in sync across all your devices.';
+      iconWrap.classList.add('bg-emerald-100','text-emerald-600');
+      break;
+  }
+  txt.textContent = message;
+  if (iconWrap.firstElementChild) iconWrap.firstElementChild.setAttribute('data-lucide', icon);
+
+  if (errWrap && errTxt) {
+    if (cloud.status === 'error' && cloud.lastError) {
+      errWrap.classList.remove('hidden');
+      errTxt.textContent = cloud.lastError;
+    } else {
+      errWrap.classList.add('hidden');
+    }
+  }
+  if (btn) btn.disabled = false;
+  lucide.createIcons();
+}
+
+/* ── saveState wrapper: schedule a debounced cloud push on every local mutation. ── */
+(function wrapSaveStateForCloud() {
+  if (typeof saveState !== 'function') return;
+  const original = saveState;
+  saveState = function patchedSaveState() {
+    const result = original.apply(this, arguments);
+    if (cloud.enabled && !cloud.applyingRemote && cloud.initialDone) {
+      if (cloud.debounceTimer) clearTimeout(cloud.debounceTimer);
+      cloud.debounceTimer = setTimeout(() => {
+        cloud.debounceTimer = null;
+        _pushDiffToCloud();
+      }, 500);
+    }
+    return result;
+  };
+})();
 
 /* ─────────────────────────────────────────────
    NOTIFICATIONS  (countdown + daily + monthly)
