@@ -37,12 +37,15 @@
         window.__FB_READY__ = true;
 
         // Enable Firestore offline persistence (best-effort — fails in private mode / multi-tab).
+        // CRITICAL: __FB_FIRESTORE_READY__ must be set OUTSIDE the try-catch so that
+        // a synchronous throw from enablePersistence() (common on Android WebView or
+        // incognito) doesn't leave the flag false and silently kill all cloud sync.
         if (firebase.firestore) {
           try {
             firebase.firestore().enablePersistence({ synchronizeTabs: true })
               .catch(() => {/* offline cache simply disabled — sync still works */});
-            window.__FB_FIRESTORE_READY__ = true;
-          } catch (e) { console.warn('Firestore persistence not enabled:', e); }
+          } catch (e) { console.warn('Firestore persistence skipped:', e); }
+          window.__FB_FIRESTORE_READY__ = true; // always true as long as Firestore SDK loaded
         }
       } catch (e) { console.error('Firebase init failed', e); }
     }
@@ -223,6 +226,8 @@
       50%  { left: 30%;  width: 55%; }
       100% { left: 100%; width: 40%; }
     }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1s linear infinite; }
   </style>
 </head>
 <body class="min-h-screen">
@@ -315,6 +320,12 @@
       </div>
     </div>
     <div class="flex items-center gap-2">
+      <!-- Cloud sync button: visible & interactive only when signed in -->
+      <button onclick="manualSyncNow()" id="headerSyncBtn"
+              class="hidden relative w-10 h-10 rounded-2xl bg-white border border-rose-100 shadow-soft hover:bg-rose-50 transition flex items-center justify-center"
+              title="Sync now">
+        <i data-lucide="cloud" id="headerSyncIcon" class="w-4 h-4 text-rose-400"></i>
+      </button>
       <button onclick="openNotifCenter()" id="bellBtn" class="relative w-10 h-10 rounded-2xl bg-white border border-rose-100 text-rose-600 shadow-soft hover:bg-rose-50 transition flex items-center justify-center" title="Notifications">
         <i data-lucide="bell" class="w-4 h-4"></i>
         <span id="bellBadge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">0</span>
@@ -1234,6 +1245,9 @@
         );
         // Migrate legacy 'custom' type → 'special'
         state.events.forEach(ev => { if (ev.type === 'custom') ev.type = 'special'; });
+        // Migrate oversized images: compress any image larger than ~200 KB (base64) so
+        // they fit within Firestore's 1 MiB document limit and can sync cross-device.
+        _migrateOversizedImages();
       }
       storageMode = 'local';
     } catch (e) {
@@ -1245,6 +1259,35 @@
     const warn = document.getElementById('storageWarn');
     if (!warn) return;
     warn.classList.toggle('hidden', storageMode === 'local');
+  }
+
+  /**
+   * Downscale images stored in existing events so they fit in Firestore documents
+   * and sync correctly across devices. Runs once at boot after loadState().
+   * Images >200 KB base64 (≈150 KB raw) are re-encoded at max 800×800 JPEG 0.72.
+   * This is async/non-blocking — state is saved quietly in the background.
+   */
+  function _migrateOversizedImages() {
+    const LIMIT = 200 * 1024; // 200 KB base64 threshold
+    const toMigrate = state.events.filter(ev => ev.image && ev.image.length > LIMIT);
+    if (!toMigrate.length) return;
+    let done = 0;
+    toMigrate.forEach(ev => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(800 / img.width, 800 / img.height, 1);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        ev.image = c.toDataURL('image/jpeg', 0.72);
+        done++;
+        if (done === toMigrate.length) saveState(); // persist after all done
+      };
+      img.src = ev.image;
+    });
   }
 
   /* ──────────────────────────────────
@@ -1321,6 +1364,7 @@
     const userBlock = document.getElementById('userBlock');
     const userSigninBlock = document.getElementById('userSigninBlock');
     const fbReady = !!window.__FB_READY__;
+    const hBtn = document.getElementById('headerSyncBtn');
     if (user) {
       if (screen) { screen.classList.add('hidden'); screen.classList.remove('flex'); }
       if (userBlock) {
@@ -1330,9 +1374,11 @@
         document.getElementById('userInitial').textContent = (email || '?').charAt(0).toUpperCase();
       }
       if (userSigninBlock) userSigninBlock.classList.add('hidden');
+      if (hBtn) hBtn.classList.remove('hidden');
     } else {
       if (userBlock) userBlock.classList.add('hidden');
       if (userSigninBlock) userSigninBlock.classList.toggle('hidden', !fbReady);
+      if (hBtn) hBtn.classList.add('hidden');
     }
   }
 
@@ -1465,36 +1511,8 @@
     return !!(window.__FB_FIRESTORE_READY__ && firebase && firebase.firestore);
   }
 
-  /**
-   * Return a copy of the event safe for Firestore storage.
-   * Images are stripped because base64 data-URLs can exceed Firestore's
-   * 1 MiB per-document limit and break the entire sync session.
-   * Images remain in localStorage and are restored when cloud data is applied.
-   */
-  function _evForCloud(ev) {
-    if (!ev) return ev;
-    const copy = Object.assign({}, ev);
-    delete copy.image;
-    return copy;
-  }
-
-  /**
-   * Stable fingerprint used to detect whether an event needs a cloud write.
-   * Excludes the image field — images are never stored in Firestore,
-   * so they must not influence the diff comparison.
-   */
-  function _hashEvent(ev) { return JSON.stringify(_evForCloud(ev)); }
-
-  /**
-   * When applying a cloud event, restore the image from the local copy (if any)
-   * so we never blank out a photo the user has already stored locally.
-   */
-  function _mergeLocalImage(cloudEv) {
-    if (!cloudEv || !cloudEv.id) return cloudEv;
-    const local = (state.events || []).find(e => e.id === cloudEv.id);
-    if (local && local.image) return Object.assign({}, cloudEv, { image: local.image });
-    return cloudEv;
-  }
+  /** Stable JSON-string fingerprint of an event for diffing. */
+  function _hashEvent(ev) { return JSON.stringify(ev); }
 
   /** Build the meta-document payload from local state. */
   function _buildMeta() {
@@ -1573,7 +1591,7 @@
     (state.events || []).forEach(e => { if (e && e.id) merged.set(e.id, e); });
     evSnap.docs.forEach(d => {
       const data = d.data();
-      if (data && data.id) merged.set(data.id, _mergeLocalImage(data)); // restore local image if cloud stripped it
+      if (data && data.id) merged.set(data.id, data);
     });
 
     // ── Meta: prefer cloud values where present, otherwise keep local ──
@@ -1618,7 +1636,7 @@
     cloud.lastEventHashes = {};
     evSnap.docs.forEach(d => {
       const data = d.data();
-      if (data && data.id) cloud.lastEventHashes[data.id] = _hashEvent(data); // _hashEvent already strips image
+      if (data && data.id) cloud.lastEventHashes[data.id] = _hashEvent(data);
     });
     // Seed lastMetaHash from cloud projected through the same shape _buildMeta
     // emits, so the diff-push only writes meta when the merged local shape
@@ -1670,10 +1688,8 @@
             if (idx !== -1) state.events.splice(idx, 1);
             delete cloud.lastEventHashes[data.id];
           } else {
-            // Restore local image — cloud events never carry image data
-            const merged = _mergeLocalImage(data);
-            if (idx === -1) state.events.push(merged); else state.events[idx] = merged;
-            cloud.lastEventHashes[data.id] = _hashEvent(merged);
+            if (idx === -1) state.events.push(data); else state.events[idx] = data;
+            cloud.lastEventHashes[data.id] = _hashEvent(data);
           }
         });
         saveState();
@@ -1732,10 +1748,10 @@
     // Events: write only changed; delete missing.
     (state.events || []).forEach(ev => {
       if (!ev || !ev.id) return;
-      const h = _hashEvent(ev);           // hash excludes image field
+      const h = _hashEvent(ev);
       newHashes[ev.id] = h;
       if (cloud.lastEventHashes[ev.id] !== h) {
-        ops.push(evRef.doc(ev.id).set(_evForCloud(ev)));   // strip image before cloud write
+        ops.push(evRef.doc(ev.id).set(ev));
       }
     });
     Object.keys(cloud.lastEventHashes).forEach(id => {
@@ -1795,6 +1811,45 @@
     const errWrap = document.getElementById('cloudSyncError');
     const errTxt  = document.getElementById('cloudSyncErrorText');
     const btn = document.getElementById('cloudSyncBtn');
+
+    // ── Header sync button ──────────────────────────────────────────────────
+    const hBtn = document.getElementById('headerSyncBtn');
+    const hIcon = document.getElementById('headerSyncIcon');
+    if (hBtn && hIcon) {
+      const signedIn = !!(firebaseAuth && firebaseAuth.currentUser);
+      hBtn.classList.toggle('hidden', !signedIn);
+      hIcon.classList.remove('spin');
+      if (signedIn) {
+        switch (cloud.status) {
+          case 'syncing':
+            hIcon.setAttribute('data-lucide', 'refresh-cw');
+            hBtn.classList.remove('border-rose-100','border-emerald-300','border-red-300');
+            hBtn.classList.add('border-amber-300');
+            hIcon.style.color = '#d97706';
+            hIcon.classList.add('spin');
+            break;
+          case 'error':
+            hIcon.setAttribute('data-lucide', 'cloud-alert');
+            hBtn.classList.remove('border-rose-100','border-emerald-300','border-amber-300');
+            hBtn.classList.add('border-red-300');
+            hIcon.style.color = '#ef4444';
+            break;
+          default: // idle
+            hIcon.setAttribute('data-lucide', 'cloud-check');
+            hBtn.classList.remove('border-amber-300','border-red-300');
+            hBtn.classList.add('border-emerald-300');
+            hIcon.style.color = '#16a34a';
+            break;
+        }
+        hBtn.title = cloud.status === 'syncing' ? 'Syncing…'
+                   : cloud.status === 'error'   ? 'Sync error — tap to retry'
+                   : cloud.lastSyncedAt         ? 'Synced ' + _relativeTime(cloud.lastSyncedAt) + ' · tap to sync'
+                   : 'Tap to sync';
+        lucide.createIcons();
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     if (!txt || !iconWrap) return;
 
     if (!cloud.enabled) {
@@ -3590,15 +3645,17 @@
 
   function applyCrop() {
     if (!cropperInstance) { hideModal('cropperModal'); return; }
-    // Cap the output to keep localStorage healthy. JPEG quality 0.85 ≈ great quality, modest size.
+    // Cap output to keep images well under Firestore's 1 MiB document limit
+    // while still being clear enough for thumbnails.
+    // max 800×800 + JPEG 0.72 ≈ 50–200 KB base64 — safe for cross-device cloud sync.
     const canvas = cropperInstance.getCroppedCanvas({
-      maxWidth: 1600,
-      maxHeight: 1600,
+      maxWidth: 800,
+      maxHeight: 800,
       imageSmoothingEnabled: true,
       imageSmoothingQuality: 'high',
     });
     if (!canvas) { toast('Could not crop image'); return; }
-    const out = canvas.toDataURL('image/jpeg', 0.85);
+    const out = canvas.toDataURL('image/jpeg', 0.72);
     showImage(out);
     cropperInstance.destroy();
     cropperInstance = null;
