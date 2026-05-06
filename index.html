@@ -689,6 +689,54 @@
             <span id="cloudSyncErrorText"></span>
           </div>
         </div>
+
+        <!-- Connection Test / Firestore Rules Guide -->
+        <div class="mt-3 bg-white rounded-2xl border border-rose-100 shadow-soft overflow-hidden">
+          <button onclick="toggleDiagnostics()" class="w-full flex items-center gap-3 p-4 hover:bg-rose-50 transition text-left">
+            <div class="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="stethoscope" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+              <div class="text-sm font-semibold text-cocoa-800">Connection Test</div>
+              <div class="text-xs text-cocoa-700/70">Diagnose sync issues · Firestore rules guide</div>
+            </div>
+            <i data-lucide="chevron-down" id="diagChevron" class="w-4 h-4 text-rose-400 transition-transform"></i>
+          </button>
+          <div id="diagPanel" class="hidden px-4 pb-4 space-y-3">
+            <!-- Run test -->
+            <button onclick="runConnectionTest()" id="diagRunBtn"
+                    class="w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-2">
+              <i data-lucide="play" class="w-4 h-4"></i> Run Test
+            </button>
+            <!-- Results -->
+            <div id="diagResults" class="hidden space-y-2 text-xs"></div>
+            <!-- Rules guide (always visible inside panel) -->
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 space-y-2">
+              <div class="font-bold flex items-center gap-1.5"><i data-lucide="shield-alert" class="w-3.5 h-3.5"></i> Firestore Security Rules — Required Step</div>
+              <p>If sync shows <strong>Permission denied</strong>, you need to paste these rules in your Firebase Console:</p>
+              <div class="bg-white border border-amber-200 rounded-lg p-2 font-mono text-[10px] leading-relaxed text-cocoa-800 select-all whitespace-pre" id="rulesCode">rules_version = '2';
+                service cloud.firestore {
+                match /databases/{database}/documents {
+                match /users/{userId}/{document=**} {
+                allow read, write: if
+                request.auth != null &&
+                request.auth.uid == userId;
+                }
+                }
+                }</div>
+              <button onclick="copyRules()" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-200 text-amber-900 font-semibold hover:bg-amber-300 transition">
+                <i data-lucide="copy" class="w-3 h-3"></i> Copy rules
+              </button>
+              <ol class="list-decimal list-inside space-y-1 text-amber-800">
+                <li>Go to <strong>Firebase Console → Firestore → Rules</strong></li>
+                <li>Replace everything with the rules above</li>
+                <li>Click <strong>Publish</strong></li>
+                <li>Come back and tap <strong>Sync now</strong></li>
+              </ol>
+              <p class="text-amber-700">Also confirm you are signed in with the <strong>same email</strong> on both devices.</p>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- Account: not signed in -->
@@ -1334,6 +1382,108 @@
   function openSettings() { updateStorageWarn(); updateAuthUI(firebaseAuth ? firebaseAuth.currentUser : null); updateCloudSyncUI(); syncNotifSettingsToUI(); showModal('settingsModal'); }
   function closeSettings() { hideModal('settingsModal'); }
 
+  /* ── Diagnostics ── */
+  function toggleDiagnostics() {
+    const panel = document.getElementById('diagPanel');
+    const chevron = document.getElementById('diagChevron');
+    const open = panel.classList.toggle('hidden');
+    if (chevron) chevron.style.transform = open ? '' : 'rotate(180deg)';
+    setTimeout(() => lucide.createIcons(), 10);
+  }
+
+  function copyRules() {
+    const code = document.getElementById('rulesCode').textContent;
+    navigator.clipboard.writeText(code).then(() => toast('Rules copied to clipboard')).catch(() => {
+      // fallback
+      const ta = document.createElement('textarea');
+      ta.value = code; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+      toast('Rules copied');
+    });
+  }
+
+  async function runConnectionTest() {
+    const btn = document.getElementById('diagRunBtn');
+    const results = document.getElementById('diagResults');
+    if (!results) return;
+    btn.disabled = true; btn.innerHTML = '<span class="spin inline-block">↻</span> Testing…';
+    results.classList.remove('hidden');
+    results.innerHTML = '';
+
+    const step = (icon, label, status, detail) => {
+      const color = status === 'ok' ? 'text-emerald-600' : status === 'fail' ? 'text-red-600' : 'text-amber-600';
+      const bg    = status === 'ok' ? 'bg-emerald-50 border-emerald-200' : status === 'fail' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200';
+      const sym   = status === 'ok' ? '✓' : status === 'fail' ? '✗' : '!';
+      results.innerHTML += `<div class="flex items-start gap-2 p-2 rounded-lg border ${bg}">
+        <span class="${color} font-bold text-sm">${sym}</span>
+        <div><div class="font-semibold ${color}">${label}</div>${detail ? `<div class="text-[10px] text-cocoa-700/80 mt-0.5">${detail}</div>` : ''}</div>
+      </div>`;
+    };
+
+    // 1. Firebase SDK
+    if (!window.__FB_READY__) {
+      step('', 'Firebase SDK', 'fail', 'Firebase not initialized — check your firebaseConfig in index.html.');
+      finish(); return;
+    }
+    step('', 'Firebase SDK', 'ok', 'Initialized successfully.');
+
+    // 2. Auth
+    const user = firebaseAuth && firebaseAuth.currentUser;
+    if (!user) {
+      step('', 'Authentication', 'fail', 'Not signed in. Sign in first, then re-run the test.');
+      finish(); return;
+    }
+    step('', 'Authentication', 'ok', `Signed in as ${user.email}`);
+
+    // 3. Firestore ready
+    if (!window.__FB_FIRESTORE_READY__) {
+      step('', 'Firestore SDK', 'fail', 'Firestore SDK not ready.');
+      finish(); return;
+    }
+    step('', 'Firestore SDK', 'ok', 'SDK loaded.');
+
+    // 4. Write test
+    const fs = firebase.firestore();
+    const testRef = fs.collection('users').doc(user.uid).collection('_test').doc('ping');
+    try {
+      await testRef.set({ ts: Date.now(), ok: true });
+      step('', 'Firestore Write', 'ok', 'Successfully wrote test document.');
+    } catch (e) {
+      const msg = e.code === 'permission-denied'
+        ? 'Permission denied. You need to set Firestore Security Rules — see the guide below.'
+        : (e.message || 'Write failed');
+      step('', 'Firestore Write', 'fail', msg);
+      finish(); return;
+    }
+
+    // 5. Read test
+    try {
+      const snap = await testRef.get();
+      if (snap.exists) {
+        step('', 'Firestore Read', 'ok', 'Successfully read test document back.');
+      } else {
+        step('', 'Firestore Read', 'warn', 'Document written but not readable — unusual.');
+      }
+      await testRef.delete();
+    } catch (e) {
+      step('', 'Firestore Read', 'fail', e.message || 'Read failed');
+      finish(); return;
+    }
+
+    // 6. All good
+    results.innerHTML += `<div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold text-center">
+      ✅ All checks passed — sync should work across devices.<br>
+      <span class="font-normal">Make sure you sign in with the same email on every device.</span>
+    </div>`;
+
+    function finish() {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="play" class="w-4 h-4"></i> Run Test';
+      setTimeout(() => lucide.createIcons(), 10);
+    }
+    finish();
+  }
+
   /* ──────────────────────────────────
      FIREBASE AUTH
   ────────────────────────────────── */
@@ -1767,27 +1917,44 @@
       })));
     }
 
-    cloud.lastEventHashes = newHashes;
-    cloud.lastMetaHash    = metaJson;
-
     if (!ops.length) { _setCloudStatus('idle'); return; }
 
+    // ⚠️  IMPORTANT: only commit hashes AFTER a successful write.
+    // Committing before the await meant a single failed write would permanently
+    // mark those events as "synced" and they'd never be retried.
     try {
       await Promise.all(ops);
+      cloud.lastEventHashes = newHashes;   // ← moved here (after success)
+      cloud.lastMetaHash    = metaJson;    // ← moved here (after success)
       _setCloudStatus('idle');
     } catch (e) {
       console.warn('cloud push failed:', e);
-      _setCloudStatus('error', (e && e.message) || 'Push failed');
+      // Do NOT update hashes — keep them stale so the next push retries everything.
+      _setCloudStatus('error', _friendlyFirestoreError(e));
     }
   }
 
-  /** Manual "Sync now" handler — exposed via the Settings UI. */
+  /** Turn raw Firestore errors into something the user can act on. */
+  function _friendlyFirestoreError(e) {
+    const code = (e && e.code) || '';
+    if (code === 'permission-denied')
+      return 'Permission denied — check your Firestore Security Rules in Firebase Console. Tap "Connection Test" in Settings for a guide.';
+    if (code === 'unavailable' || code === 'deadline-exceeded')
+      return 'Network unavailable — will retry when back online.';
+    if (code === 'unauthenticated')
+      return 'Not signed in — sign out and sign back in.';
+    return (e && e.message) || 'Push failed';
+  }
+
+  /** Manual "Sync now" — clears hash caches so every event is force-pushed. */
   function manualSyncNow() {
     if (!cloud.enabled) {
       if (firebaseAuth && firebaseAuth.currentUser) startCloudSync(firebaseAuth.currentUser);
       return;
     }
-    // Re-run a full diff push.
+    // Clear caches so diff push re-evaluates and re-sends every event.
+    cloud.lastEventHashes = {};
+    cloud.lastMetaHash    = '';
     _pushDiffToCloud();
   }
 
